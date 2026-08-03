@@ -1,19 +1,19 @@
 import os
 from dotenv import load_dotenv
-from google import genai
+from groq import Groq
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3.5-flash"
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
 
-def _ask_gemini(prompt: str) -> str:
-    response = client.models.generate_content(
+def _ask_groq(prompt: str) -> str:
+    response = client.chat.completions.create(
         model=MODEL,
-        contents=prompt,
+        messages=[{"role": "user", "content": prompt}],
     )
-    return response.text
+    return response.choices[0].message.content
 
 
 def summarize_text(text: str) -> str:
@@ -23,7 +23,7 @@ Focus on what the paper is about, its core contribution, and why it matters.
 Paper text:
 {text[:8000]}
 """
-    return _ask_gemini(prompt)
+    return _ask_groq(prompt)
 
 
 def extract_methodology(text: str) -> str:
@@ -33,7 +33,7 @@ Explain the approach, techniques, models, or experimental design used — in 100
 Paper text:
 {text[:8000]}
 """
-    return _ask_gemini(prompt)
+    return _ask_groq(prompt)
 
 
 def extract_research_gaps(text: str) -> str:
@@ -43,7 +43,7 @@ What open questions remain, or what does the paper acknowledge it doesn't fully 
 Paper text:
 {text[:8000]}
 """
-    return _ask_gemini(prompt)
+    return _ask_groq(prompt)
 
 
 def extract_findings(text: str) -> str:
@@ -52,7 +52,7 @@ def extract_findings(text: str) -> str:
 Paper text:
 {text[:8000]}
 """
-    return _ask_gemini(prompt)
+    return _ask_groq(prompt)
 
 
 def extract_future_work(text: str) -> str:
@@ -62,13 +62,12 @@ What do the authors suggest could be explored next? Answer in 80-120 words.
 Paper text:
 {text[:8000]}
 """
-    return _ask_gemini(prompt)
+    return _ask_groq(prompt)
 
 
 def summarize_paper(text: str) -> dict:
     from map_reduce import get_condensed_text
-    text = get_condensed_text(text)  # handles long papers via map-reduce automatically
-    """The Phase 3 deliverable: runs all 5 extraction prompts and returns a structured dict."""
+    text = get_condensed_text(text)
     return {
         "summary": summarize_text(text),
         "methodology": extract_methodology(text),

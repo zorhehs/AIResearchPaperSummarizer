@@ -1,15 +1,14 @@
 import os
 import time
 from dotenv import load_dotenv
-from google import genai
-from google.genai import errors as genai_errors
+from groq import Groq
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3.5-flash"
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
-CHUNK_SIZE = 20000  # bigger chunks = fewer API calls, respects the 20/day free limit
+CHUNK_SIZE = 20000
 OVERLAP = 200
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -25,21 +24,19 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) 
     return chunks
 
 
-def _call_gemini_with_retry(prompt: str) -> str:
+def _call_groq_with_retry(prompt: str) -> str:
     delay = RETRY_DELAY
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = client.models.generate_content(model=MODEL, contents=prompt)
-            return response.text
-        except genai_errors.ClientError as e:
-            if "RESOURCE_EXHAUSTED" in str(e):
-                print(f"    DAILY QUOTA EXCEEDED. Free tier allows only 20 requests/day for {MODEL}.")
-                print(f"    Wait until tomorrow, or reduce test runs. Raising error.")
-            raise
-        except genai_errors.ServerError:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
             if attempt == MAX_RETRIES:
                 raise
-            print(f"    (server busy, retrying in {delay}s... attempt {attempt}/{MAX_RETRIES})")
+            print(f"    (error: {e}, retrying in {delay}s... attempt {attempt}/{MAX_RETRIES})")
             time.sleep(delay)
             delay *= 2
 
@@ -52,8 +49,8 @@ Summarize the key points of THIS SECTION ONLY in 100-150 words.
 Text:
 {chunk}
 """
-    result = _call_gemini_with_retry(prompt)
-    time.sleep(2)
+    result = _call_groq_with_retry(prompt)
+    time.sleep(1)
     return result
 
 
@@ -66,7 +63,7 @@ Combine them into one coherent summary of the ENTIRE paper, preserving logical f
 Section summaries:
 {combined}
 """
-    return _call_gemini_with_retry(prompt)
+    return _call_groq_with_retry(prompt)
 
 
 def get_condensed_text(full_text: str) -> str:
