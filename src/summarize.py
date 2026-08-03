@@ -66,6 +66,8 @@ Paper text:
 
 
 def summarize_paper(text: str) -> dict:
+    from map_reduce import get_condensed_text
+    text = get_condensed_text(text)  # handles long papers via map-reduce automatically
     """The Phase 3 deliverable: runs all 5 extraction prompts and returns a structured dict."""
     return {
         "summary": summarize_text(text),
