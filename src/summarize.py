@@ -65,19 +65,44 @@ Paper text:
     return _ask_groq(prompt)
 
 
+def _get_relevant_text(sections: dict, keys: list, fallback: str) -> str:
+    """Pull whichever of the given section keys exist and concatenate them.
+    Falls back to the full condensed text if none of those keys were detected
+    (e.g. when sections.py fell back to generic chunk_N splitting)."""
+    parts = [sections[k] for k in keys if k in sections]
+    combined = "\n\n".join(parts).strip()
+    return combined if combined else fallback
+
+
 def summarize_paper(text: str, session_id: str = None) -> dict:
     if session_id:
         from user_session import check_and_increment_usage
-        check_and_increment_usage(session_id)  # raises 429 if daily limit exceeded
+        check_and_increment_usage(session_id)
 
     from map_reduce import get_condensed_text
-    text = get_condensed_text(text)
+    condensed = get_condensed_text(text)
+
+    from sections import get_sections
+    sections = get_sections(text)
+
+    # If sections.py fell back to generic chunk_N splitting, we have no
+    # meaningful section labels -- just use the condensed full text everywhere.
+    has_real_sections = not all(k.startswith("chunk_") for k in sections.keys())
+
+    if has_real_sections:
+        methodology_text = _get_relevant_text(sections, ["methodology", "method", "methods", "approach"], condensed)
+        results_text = _get_relevant_text(sections, ["results", "evaluation", "main results", "experiments"], condensed)
+        gaps_text = _get_relevant_text(sections, ["limitations", "discussion"], condensed)
+        future_text = _get_relevant_text(sections, ["future work", "conclusion", "conclusions"], condensed)
+    else:
+        methodology_text = results_text = gaps_text = future_text = condensed
+
     return {
-        "summary": summarize_text(text),
-        "methodology": extract_methodology(text),
-        "research_gaps": extract_research_gaps(text),
-        "findings": extract_findings(text),
-        "future_work": extract_future_work(text),
+        "summary": summarize_text(condensed),
+        "methodology": extract_methodology(methodology_text),
+        "research_gaps": extract_research_gaps(gaps_text),
+        "findings": extract_findings(results_text),
+        "future_work": extract_future_work(future_text),
     }
 
 

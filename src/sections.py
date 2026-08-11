@@ -9,7 +9,7 @@ KNOWN_HEADERS = [
     "preliminaries", "the model", "main results", "proofs"
 ]
 
-def is_header_line(line: str) -> str | None:
+def is_header_line(line: str):
     stripped = line.strip()
     if not stripped or len(stripped) > 60:
         return None
