@@ -21,7 +21,7 @@ def summarize_text(text: str) -> str:
 Focus on what the paper is about, its core contribution, and why it matters.
 
 Paper text:
-{text[:8000]}
+{text}
 """
     return _ask_groq(prompt)
 
@@ -31,7 +31,7 @@ def extract_methodology(text: str) -> str:
 Explain the approach, techniques, models, or experimental design used — in 100-150 words.
 
 Paper text:
-{text[:8000]}
+{text}
 """
     return _ask_groq(prompt)
 
@@ -41,7 +41,7 @@ def extract_research_gaps(text: str) -> str:
 What open questions remain, or what does the paper acknowledge it doesn't fully solve? Answer in 80-120 words.
 
 Paper text:
-{text[:8000]}
+{text}
 """
     return _ask_groq(prompt)
 
@@ -50,7 +50,7 @@ def extract_findings(text: str) -> str:
     prompt = f"""List the key findings or results of this research paper as 3-5 concise bullet points.
 
 Paper text:
-{text[:8000]}
+{text}
 """
     return _ask_groq(prompt)
 
@@ -60,7 +60,7 @@ def extract_future_work(text: str) -> str:
 What do the authors suggest could be explored next? Answer in 80-120 words.
 
 Paper text:
-{text[:8000]}
+{text}
 """
     return _ask_groq(prompt)
 

@@ -9,7 +9,7 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.3-70b-versatile"
 
 CHUNK_SIZE = 20000
-OVERLAP = 200
+OVERLAP = 100
 MAX_RETRIES = 3
 RETRY_DELAY = 10
 

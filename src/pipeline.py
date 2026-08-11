@@ -71,8 +71,11 @@ def process_input(pdf_path=None, doi=None, email="zorhehs@gmail.com"):
 
 
 if __name__ == "__main__":
+    import sys
+    test_pdf = sys.argv[1] if len(sys.argv) > 1 else "tests/sample_papers/paper1.pdf"
+
     print("===== TEST 1: Local PDF =====")
-    result1 = process_input(pdf_path="tests/sample_papers/paper1.pdf")
+    result1 = process_input(pdf_path=test_pdf)
     print("Source:", result1["source"])
     print("Title:", result1["title"])
     print("Text length:", len(result1["full_text"]))
