@@ -90,8 +90,8 @@ def summarize_paper(text: str, session_id: str = None) -> dict:
     has_real_sections = not all(k.startswith("chunk_") for k in sections.keys())
 
     if has_real_sections:
-        methodology_text = _get_relevant_text(sections, ["methodology", "method", "methods", "approach"], condensed)
-        results_text = _get_relevant_text(sections, ["results", "evaluation", "main results", "experiments"], condensed)
+        methodology_text = _get_relevant_text(sections, ["methodology", "method", "methods", "approach", "system design", "proposed method", "introduction"], condensed)
+        results_text = _get_relevant_text(sections, ["results", "evaluation", "main results", "experiments", "experimental results"], condensed)
         gaps_text = _get_relevant_text(sections, ["limitations", "discussion"], condensed)
         future_text = _get_relevant_text(sections, ["future work", "conclusion", "conclusions"], condensed)
     else:

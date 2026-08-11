@@ -2,12 +2,15 @@ import re
 
 KNOWN_HEADERS = [
     "abstract", "introduction", "related work", "background",
-    "methodology", "method", "methods", "approach",
-    "experiments", "experimental setup", "results", "evaluation",
+    "methodology", "method", "methods", "approach", "approaches",
+    "system design", "system architecture", "proposed method", "proposed approach",
+    "experiments", "experimental setup", "experimental results", "results", "evaluation",
+    "implementation", "design", "model", "models", "framework",
     "discussion", "limitations", "conclusion", "conclusions",
     "future work", "acknowledgments", "references",
     "preliminaries", "the model", "main results", "proofs"
 ]
+
 
 def is_header_line(line: str):
     stripped = line.strip()
@@ -21,6 +24,7 @@ def is_header_line(line: str):
         if normalized == header:
             return header
     return None
+
 
 def split_into_sections(text: str) -> dict:
     lines = text.split("\n")
@@ -40,6 +44,7 @@ def split_into_sections(text: str) -> dict:
     sections[current_section] = "\n".join(buffer).strip()
     return sections
 
+
 def chunk_by_length(text: str, chunk_size: int = 3000) -> dict:
     """Fallback: split text into roughly equal-sized numbered chunks
     when header detection doesn't produce a usable structure."""
@@ -48,6 +53,7 @@ def chunk_by_length(text: str, chunk_size: int = 3000) -> dict:
         chunk_num = (i // chunk_size) + 1
         chunks[f"chunk_{chunk_num}"] = text[i:i + chunk_size].strip()
     return chunks
+
 
 def get_sections(text: str, imbalance_threshold: float = 0.7) -> dict:
     """Try header-based splitting first. If one section dominates
@@ -63,6 +69,7 @@ def get_sections(text: str, imbalance_threshold: float = 0.7) -> dict:
         return chunk_by_length(text)
 
     return sections
+
 
 if __name__ == "__main__":
     from extract import extract_text
