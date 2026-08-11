@@ -65,7 +65,11 @@ Paper text:
     return _ask_groq(prompt)
 
 
-def summarize_paper(text: str) -> dict:
+def summarize_paper(text: str, session_id: str = None) -> dict:
+    if session_id:
+        from user_session import check_and_increment_usage
+        check_and_increment_usage(session_id)  # raises 429 if daily limit exceeded
+
     from map_reduce import get_condensed_text
     text = get_condensed_text(text)
     return {
