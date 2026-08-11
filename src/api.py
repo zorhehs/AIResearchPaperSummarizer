@@ -1,74 +1,87 @@
-import sys
 import os
-
-# Ensure this directory is on the path so sibling imports (pipeline, summarize, etc.) work
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import shutil
-from fastapi import FastAPI, UploadFile, File, Form, Request, Response, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 
 from pipeline import process_input
 from summarize import summarize_paper
-from user_session import get_or_create_session_id, check_and_increment_usage, init_db
 
 app = FastAPI(title="AI Research Paper Summarizer")
-
-init_db()
-
-UPLOAD_DIR = "temp_uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @app.post("/summarize")
 async def summarize(
-    request: Request,
-    response: Response,
     file: UploadFile = File(None),
     doi: str = Form(None),
 ):
     if not file and not doi:
-        raise HTTPException(status_code=400, detail="Provide either a PDF file or a DOI.")
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either a PDF file or a DOI."
+        )
 
-    session_id = get_or_create_session_id(request, response)
-
+    temp_path = None
     try:
-        check_and_increment_usage(session_id)
-    except HTTPException:
-        raise
-
-    saved_path = None
-    try:
+        # --- Step 1: get raw paper content (PDF or DOI) ---
         if file:
-            saved_path = os.path.join(UPLOAD_DIR, file.filename)
-            with open(saved_path, "wb") as f:
+            if not file.filename.lower().endswith(".pdf"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only PDF files are supported."
+                )
+            temp_path = f"temp_{file.filename}"
+            with open(temp_path, "wb") as f:
                 shutil.copyfileobj(file.file, f)
-            result = process_input(pdf_path=saved_path)
+
+            try:
+                result = process_input(pdf_path=temp_path)
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not read this PDF. It may be corrupted or not a valid PDF."
+                )
         else:
-            result = process_input(doi=doi)
+            try:
+                result = process_input(doi=doi)
+            except Exception:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Error while trying to resolve the DOI. Please try again."
+                )
 
-        if result["source"] == "error":
-            raise HTTPException(status_code=422, detail=result["error"])
+            if not result.get("full_text") or len(result["full_text"].strip()) < 50:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Could not find a paper or usable metadata for DOI: {doi}"
+                )
 
-        if not result["full_text"]:
+        # --- Step 2: run summarization ---
+        try:
+            summary_fields = summarize_paper(result["full_text"])
+        except Exception as e:
             raise HTTPException(
-                status_code=422,
-                detail="Could not extract usable text from this input."
+                status_code=504,
+                detail=f"Summarization failed or timed out: {str(e)}"
             )
 
-        summary_result = summarize_paper(result["full_text"])
-
-        return JSONResponse({
-            "title": result["title"],
+        response = {
             "source": result["source"],
-            **summary_result,
-        })
+            "title": result["title"],
+            **summary_fields,
+        }
+        return JSONResponse(content=response)
+
+    except HTTPException:
+        # re-raise HTTPExceptions as-is, don't let them get caught by the generic handler below
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
     finally:
-        if saved_path and os.path.exists(saved_path):
-            os.remove(saved_path)
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.get("/")
+async def root():
+    return {"status": "AI Research Paper Summarizer API is running"}
