@@ -1,7 +1,7 @@
 import os
 import requests
 
-from extract import extract_text
+from extract import extract_text, PDFExtractionError
 from clean import clean_text
 from metadata import extract_metadata
 from fetch_doi import get_pdf_url_from_doi
@@ -29,7 +29,17 @@ def download_pdf(pdf_url, save_path="temp_downloaded.pdf"):
 
 def process_input(pdf_path=None, doi=None, email="zorhehs@gmail.com"):
     if pdf_path:
-        raw = extract_text(pdf_path)
+        try:
+            raw = extract_text(pdf_path)
+        except PDFExtractionError as e:
+            return {
+                "source": "error",
+                "title": "",
+                "abstract": "",
+                "full_text": "",
+                "error": str(e),
+            }
+
         cleaned = clean_text(raw)
         meta = extract_metadata(cleaned)
         return {
@@ -76,20 +86,9 @@ if __name__ == "__main__":
 
     print("===== TEST 1: Local PDF =====")
     result1 = process_input(pdf_path=test_pdf)
-    print("Source:", result1["source"])
-    print("Title:", result1["title"])
-    print("Text length:", len(result1["full_text"]))
-
-    print("")
-    print("===== TEST 2: DOI with open-access PDF =====")
-    result2 = process_input(doi="10.1371/journal.pone.0121283")
-    print("Source:", result2["source"])
-    print("Title:", result2["title"])
-    print("Text length:", len(result2["full_text"]))
-
-    print("")
-    print("===== TEST 3: Fake DOI =====")
-    result3 = process_input(doi="10.9999/totally.fake.doi.12345")
-    print("Source:", result3["source"])
-    print("Title:", repr(result3["title"]))
-    print("Abstract:", repr(result3["abstract"]))
+    if result1["source"] == "error":
+        print("ERROR:", result1["error"])
+    else:
+        print("Source:", result1["source"])
+        print("Title:", result1["title"])
+        print("Text length:", len(result1["full_text"]))
