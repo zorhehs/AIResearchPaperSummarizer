@@ -14,6 +14,9 @@ from user_session import get_or_create_session_id, check_and_increment_usage, in
 
 app = FastAPI(title="AI Research Paper Summarizer")
 
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 init_db()
 
 UPLOAD_DIR = "temp_uploads"
@@ -56,7 +59,16 @@ async def summarize(
                 detail="Could not extract usable text from this input."
             )
 
-        summary_result = summarize_paper(result["full_text"])
+        try:
+            summary_result = summarize_paper(result["full_text"])
+        except Exception as e:
+            error_msg = str(e)
+            if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Our AI provider's daily quota is temporarily exhausted. Please try again later."
+                )
+            raise HTTPException(status_code=500, detail=f"Summarization failed: {error_msg}")
 
         return JSONResponse({
             "title": result["title"],
@@ -72,3 +84,13 @@ async def summarize(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+@app.get("/")
+def serve_ui():
+    return FileResponse("static/index.html")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")

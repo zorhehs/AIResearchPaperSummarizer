@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Research Paper Summarizer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: #ffffff; color: #1a1a1a; margin: 0; padding: 2rem 3rem;
+  }
+  .layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; }
+  .sidebar { width: 220px; flex-shrink: 0; }
+  .sidebar-card { background: #F7F8FA; border-radius: 12px; padding: 1rem; }
+  .sidebar-heading { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
+  .sidebar-text { font-size: 0.82rem; color: #5F5E5A; line-height: 1.6; }
+  .sidebar-recent { font-size: 0.78rem; padding: 6px 8px; border-radius: 6px; background: #fff; margin-bottom: 4px; color: #5F5E5A; }
+  .sidebar-footer { font-size: 0.75rem; color: #888780; margin: 4px 0 0; }
+  hr { border: none; border-top: 1px solid #E5E7EB; margin: 12px 0; }
+
+  .main { flex: 1; min-width: 0; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  h1 i { color: #185FA5; margin-right: 8px; }
+  .subtitle { color: #5F5E5A; font-size: 0.95rem; margin-bottom: 20px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #E5E7EB; margin-bottom: 16px; }
+  .tab { padding: 8px 16px; font-size: 14px; cursor: pointer; color: #5F5E5A; }
+  .tab.active { color: #185FA5; font-weight: 500; border-bottom: 2px solid #185FA5; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .dropzone {
+    border: 1px dashed #B4B2A9; border-radius: 8px; padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer;
+  }
+  .dropzone-left { display: flex; align-items: center; gap: 10px; }
+  .dropzone i { font-size: 22px; color: #888780; }
+  .dropzone p { margin: 0; font-size: 14px; }
+  .dropzone .hint { font-size: 12px; color: #888780; }
+
+  button {
+    background: #1a1a1a; color: white; border: none; border-radius: 6px;
+    padding: 9px 20px; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  button.secondary { background: #fff; color: #1a1a1a; border: 1px solid #E5E7EB; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type="text"] {
+    width: 100%; padding: 9px 12px; border: 1px solid #E5E7EB; border-radius: 6px;
+    font-size: 14px; margin-bottom: 12px;
+  }
+
+  .filename { font-size: 13px; color: #5F5E5A; margin-bottom: 12px; }
+
+  .paper-title { font-size: 1.4rem; font-weight: 700; margin: 20px 0 6px; }
+  .tag { display: inline-block; background: #F7F8FA; color: #5F5E5A; padding: 3px 12px; border-radius: 12px; font-size: 0.78rem; margin-right: 6px; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+  .stat-card { background: #F7F8FA; border-radius: 8px; padding: 12px; }
+  .stat-card.success { background: #EAF3DE; }
+  .stat-label { font-size: 12px; color: #5F5E5A; margin: 0 0 2px; }
+  .stat-value { font-size: 20px; font-weight: 500; margin: 0; }
+  .stat-card.success .stat-value { color: #3B6D11; }
+
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .result-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; }
+  .result-card-header { display: flex; align-items: center; justify-content: space-between; font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; color: #0C447C; }
+  .result-card-header .copy-btn { cursor: pointer; color: #888780; font-size: 14px; }
+  .result-card-body { font-size: 0.88rem; color: #5F5E5A; line-height: 1.65; white-space: pre-wrap; }
+
+  .chat-section { margin-top: 24px; border-top: 1px solid #E5E7EB; padding-top: 16px; }
+  .chat-heading { font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; }
+  .chat-bubble { border-radius: 12px; padding: 10px 14px; max-width: 75%; font-size: 13px; margin-bottom: 8px; }
+  .chat-bubble.user { background: #F7F8FA; }
+  .chat-bubble.assistant { background: #E6F1FB; color: #0C447C; margin-left: auto; }
+  .chat-input-row { display: flex; gap: 8px; margin-top: 12px; }
+  .chat-input-row input { margin-bottom: 0; flex: 1; }
+
+  .loading { text-align: center; padding: 40px; color: #5F5E5A; }
+  .error-box { background: #FCEBEB; color: #791F1F; padding: 12px 16px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .empty-state { text-align: center; padding: 60px; color: #888780; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-heading"><i class="ti ti-file-description"></i> About</div>
+      <div class="sidebar-text">Upload a research paper or paste a DOI to get a structured summary covering contribution, methodology, gaps, findings, and future directions.</div>
+      <hr>
+      <div class="sidebar-heading" style="font-size:0.8rem;">Recent papers</div>
+      <div id="recent-list"></div>
+      <hr>
+      <div class="sidebar-footer">Built for NUST Research Directorate</div>
+      <div class="sidebar-footer">Backend: FastAPI · Llama 3.3 70B</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <h1><i class="ti ti-file-text"></i>AI Research Paper Summarizer</h1>
+    <div class="subtitle">Upload a PDF or paste a DOI to get a structured summary.</div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('pdf')">Upload PDF</div>
+      <div class="tab" onclick="switchTab('doi')">Enter DOI</div>
+    </div>
+
+    <div id="tab-pdf" class="tab-content active">
+      <div class="dropzone" onclick="document.getElementById('file-input').click()">
+        <div class="dropzone-left">
+          <i class="ti ti-cloud-upload"></i>
+          <div><p>Click to choose a PDF</p><p class="hint">PDF files only</p></div>
+        </div>
+        <button class="secondary" type="button">Browse files</button>
+      </div>
+      <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
+      <div id="filename" class="filename"></div>
+      <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled>Summarize PDF</button>
+    </div>
+
+    <div id="tab-doi" class="tab-content">
+      <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
+      <button onclick="summarizeDoi()">Summarize DOI</button>
+    </div>
+
+    <div id="results-area"></div>
+  </div>
+</div>
+
+<script>
+let selectedFile = null;
+let currentPaperText = "";
+let chatHistory = [];
+let recentPapers = [];
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab:nth-child(${tab === 'pdf' ? 1 : 2})`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function onFileSelected() {
+  const input = document.getElementById('file-input');
+  selectedFile = input.files[0];
+  if (selectedFile) {
+    document.getElementById('filename').textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)`;
+    document.getElementById('summarize-pdf-btn').disabled = false;
+  }
+}
+
+function showLoading() {
+  document.getElementById('results-area').innerHTML = '<div class="loading"><i class="ti ti-loader-2"></i> Reading and summarizing your paper... this can take 30-60 seconds.</div>';
+}
+
+function showError(msg) {
+  document.getElementById('results-area').innerHTML = `<div class="error-box">${msg}</div>`;
+}
+
+async function summarizePdf() {
+  if (!selectedFile) return;
+  showLoading();
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  try {
+    const res = await fetch('http://127.0.0.1:8000/summarize', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      renderResults(data);
+      addRecent(data.title || selectedFile.name);
+    } else {
+      showError(`Error ${res.status}: ${data.detail || 'Unknown error'}`);
+    }
+  } catch (e) {
+    showError(`Request failed: ${e.message}`);
+  }
+}
+
+async function summarizeDoi() {
+  const doi = document.getElementById('doi-input').value.trim();
+  if (!doi) return;
+  showLoading();
+  const formData = new FormData();
+  formData.append('doi', doi);
+  try {
+    const res = await fetch('http://127.0.0.1:8000/summarize', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      renderResults(data);
+      addRecent(data.title || doi);
+    } else {
+      showError(`Error ${res.status}: ${data.detail || 'Unknown error'}`);
+    }
+  } catch (e) {
+    showError(`Request failed: ${e.message}`);
+  }
+}
+
+function addRecent(title) {
+  recentPapers.unshift(title);
+  recentPapers = recentPapers.slice(0, 5);
+  document.getElementById('recent-list').innerHTML = recentPapers
+    .map(t => `<div class="sidebar-recent"><i class="ti ti-file-text"></i> ${t.slice(0, 38)}${t.length > 38 ? '...' : ''}</div>`)
+    .join('');
+}
+
+function renderResults(data) {
+  currentPaperText = data.full_text || data.summary;
+  chatHistory = [];
+
+  const originalWords = (data.full_text || "").split(/\s+/).filter(Boolean).length;
+  const summaryWords = ["summary","methodology","research_gaps","findings","future_work"]
+    .reduce((sum, k) => sum + data[k].split(/\s+/).filter(Boolean).length, 0);
+  const reduction = originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0;
+  const readMin = Math.max(1, Math.round(summaryWords / 200));
+
+  document.getElementById('results-area').innerHTML = `
+    <hr>
+    <div class="paper-title">${data.title || "Untitled paper"}</div>
+    <span class="tag"><i class="ti ti-file"></i> Source: ${data.source}</span>
+    <span class="tag"><i class="ti ti-clock"></i> ~${readMin} min read</span>
+
+    <div class="stats">
+      <div class="stat-card"><p class="stat-label">Original length</p><p class="stat-value">${originalWords.toLocaleString()} words</p></div>
+      <div class="stat-card"><p class="stat-label">Summary length</p><p class="stat-value">${summaryWords.toLocaleString()} words</p></div>
+      <div class="stat-card success"><p class="stat-label">Time saved</p><p class="stat-value">~${reduction}%</p></div>
+    </div>
+
+    <div class="results">
+      <div>
+        ${card("ti-notes", "Summary", data.summary)}
+        ${card("ti-flask", "Methodology", data.methodology)}
+        ${card("ti-search", "Research Gaps", data.research_gaps)}
+      </div>
+      <div>
+        ${card("ti-chart-bar", "Findings", data.findings)}
+        ${card("ti-rocket", "Future Work", data.future_work)}
+      </div>
+    </div>
+
+    <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i> Download as text</button>
+
+    <div class="chat-section">
+      <div class="chat-heading"><i class="ti ti-message-circle"></i> Ask about this paper</div>
+      <div id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Ask a question about this paper..." onkeypress="if(event.key==='Enter') sendChat()">
+        <button onclick="sendChat()">Send</button>
+      </div>
+    </div>
+  `;
+
+  window.currentResult = data;
+}
+
+function card(icon, title, body) {
+  return `
+    <div class="result-card">
+      <div class="result-card-header">
+        <span><i class="ti ${icon}"></i> ${title}</span>
+        <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(body)}"></i>
+      </div>
+      <div class="result-card-body">${body}</div>
+    </div>
+  `;
+}
+
+function copyText(el) {
+  const text = decodeURIComponent(el.dataset.text);
+  navigator.clipboard.writeText(text);
+  el.className = 'ti ti-check copy-btn';
+  setTimeout(() => { el.className = 'ti ti-copy copy-btn'; }, 1500);
+}
+
+function downloadSummary() {
+  const d = window.currentResult;
+  const report = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Future Work\n${d.future_work}`;
+  const blob = new Blob([report], { type: 'text/plain' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'paper_summary.txt';
+  link.click();
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+
+  chatHistory.push({ role: 'user', content: question });
+  renderChat();
+
+  try {
+    const res = await fetch('http://127.0.0.1:8000/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      chatHistory.push({ role: 'assistant', content: data.answer });
+      renderChat();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderChat() {
+  document.getElementById('chat-messages').innerHTML = chatHistory
+    .map(m => `<div class="chat-bubble ${m.role}">${m.content}</div>`)
+    .join('');
+}
+</script>
+
+</body>
+</html>
