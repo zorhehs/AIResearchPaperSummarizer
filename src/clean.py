@@ -21,10 +21,18 @@ def remove_references(text: str) -> str:
             return text[:idx]
     return text
 
+def remove_arxiv_watermark(text: str) -> str:
+    # arXiv stamp lines like "arXiv:2607.24676v1  [cs.GT]  27 Jul 2026"
+    return "\n".join(
+        line for line in text.split("\n")
+        if not re.match(r'\s*arxiv:\s*\S+', line, re.IGNORECASE)
+    )
+
 def clean_text(raw_text: str) -> str:
     text = fix_hyphenation(raw_text)
     text = remove_repeated_lines(text)
     text = remove_references(text)
+    text = remove_arxiv_watermark(text)
     return text
 
 if __name__ == "__main__":

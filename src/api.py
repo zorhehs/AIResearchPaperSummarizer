@@ -9,13 +9,15 @@ from fastapi import FastAPI, UploadFile, File, Form, Request, Response, HTTPExce
 from fastapi.responses import JSONResponse
 
 from pipeline import process_input
-from summarize import summarize_paper
-from user_session import get_or_create_session_id, check_and_increment_usage, init_db
+from summarize import summarize_paper, answer_question
+from user_session import get_or_create_session_id, check_and_increment_usage, init_db, router as user_router
 
 app = FastAPI(title="AI Research Paper Summarizer")
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(user_router)
 
 init_db()
 
@@ -73,12 +75,39 @@ async def summarize(
         return JSONResponse({
             "title": result["title"],
             "source": result["source"],
+            "abstract": result.get("abstract", ""),
+            "authors": result.get("authors", []),
+            "year": result.get("year", ""),
+            "journal": result.get("journal", ""),
+            "cited_by": result.get("cited_by"),
             **summary_result,
         })
 
     finally:
         if saved_path and os.path.exists(saved_path):
             os.remove(saved_path)
+
+
+@app.post("/chat")
+async def chat(payload: dict):
+    paper_text = payload.get("paper_text", "")
+    question = payload.get("question", "").strip()
+    chat_history = payload.get("chat_history", [])
+
+    if not paper_text:
+        raise HTTPException(status_code=400, detail="No paper loaded. Summarize a paper first.")
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    try:
+        answer = answer_question(paper_text, question, chat_history)
+    except Exception as e:
+        error_msg = str(e)
+        if "Ollama is not running" in error_msg:
+            raise HTTPException(status_code=503, detail=error_msg)
+        raise HTTPException(status_code=500, detail=f"Chat failed: {error_msg}")
+
+    return JSONResponse({"answer": answer})
 
 
 @app.get("/health")
@@ -89,8 +118,11 @@ def health():
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "..", "static")
+
 @app.get("/")
 def serve_ui():
-    return FileResponse("static/index.html")
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

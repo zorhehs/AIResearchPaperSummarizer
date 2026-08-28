@@ -9,64 +9,78 @@ st.set_page_config(page_title="AI Research Paper Summarizer", page_icon="📄", 
 st.markdown("""
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
     :root {
-        --accent: #185FA5;
-        --accent-bg: #E6F1FB;
-        --accent-text: #0C447C;
-        --success-bg: #EAF3DE;
-        --success-text: #3B6D11;
-        --surface-1: #F7F8FA;
-        --surface-2: #FFFFFF;
-        --border: #E5E7EB;
-        --text-secondary: #5F5E5A;
-        --text-muted: #888780;
-        --radius: 8px;
+        --bg-main: #F8FAFC;
+        --text-main: #0F172A;
+        --text-muted: #64748B;
+        --card-bg: #FFFFFF;
+        --border-color: #E2E8F0;
+        --radius: 12px;
     }
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif !important;
+        background-color: var(--bg-main);
+    }
+    
     #MainMenu, footer, header { visibility: hidden; }
     .block-container { padding-top: 2rem; max-width: 1100px; }
 
-    .app-title { font-size: 1.9rem; font-weight: 700; margin-bottom: 0.1rem; }
-    .app-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1.5rem; }
-
+    /* Headers */
+    .app-title { font-size: 2.2rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.2rem; letter-spacing: -0.02em; }
+    .app-subtitle { color: var(--text-muted); font-size: 1.05rem; margin-bottom: 2rem; }
+    .paper-title { font-size: 1.6rem; font-weight: 700; color: var(--text-main); margin: 1rem 0 10px 0; line-height: 1.3;}
+    
+    /* Sidebar */
     .sidebar-card {
-        background: var(--surface-1);
-        border-radius: 12px;
-        padding: 1rem;
+        background: var(--card-bg); border: 1px solid var(--border-color);
+        border-radius: var(--radius); padding: 1.2rem; margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .sidebar-heading { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
-    .sidebar-text { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+    .sidebar-heading { font-weight: 600; font-size: 0.95rem; color: var(--text-main); margin-bottom: 8px; }
+    .sidebar-text { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
     .sidebar-recent {
-        font-size: 0.78rem; padding: 6px 8px; border-radius: 6px;
-        background: var(--surface-2); margin-bottom: 4px; color: var(--text-secondary);
+        font-size: 0.8rem; padding: 8px 10px; border-radius: 6px;
+        background: var(--bg-main); margin-bottom: 6px; color: var(--text-main);
+        border: 1px solid var(--border-color);
     }
-    .sidebar-footer { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+    .sidebar-footer { font-size: 0.75rem; color: #94A3B8; margin-top: 8px; }
 
-    .paper-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 6px; }
+    /* Tags & Metrics */
     .tag {
-        display: inline-block; background: var(--surface-1); color: var(--text-secondary);
-        padding: 3px 12px; border-radius: 12px; font-size: 0.78rem; margin-right: 6px;
+        display: inline-flex; align-items: center; gap: 4px;
+        background: var(--card-bg); color: var(--text-muted); border: 1px solid var(--border-color);
+        padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 500; margin-right: 8px;
     }
+    div[data-testid="stMetric"] {
+        background: var(--card-bg); border: 1px solid var(--border-color);
+        border-radius: var(--radius); padding: 1.2rem 1.5rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    div[data-testid="stMetric"] label { font-weight: 500 !important; color: var(--text-muted) !important; }
 
+    /* Custom Result Cards */
     .result-card {
-        background: var(--surface-2); border: 1px solid var(--border);
-        border-radius: 12px; padding: 14px 18px; margin-bottom: 12px;
+        background: var(--card-bg); border: 1px solid var(--border-color);
+        border-radius: 16px; padding: 24px; margin-bottom: 20px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .result-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
     }
     .result-card-header {
-        display: flex; align-items: center; gap: 6px;
-        font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; color: var(--accent-text);
+        display: flex; align-items: center; gap: 8px;
+        font-size: 1.15rem; font-weight: 600; margin-bottom: 14px; color: var(--text-main);
+        border-bottom: 1px solid #F1F5F9; padding-bottom: 12px;
     }
-    .result-card-body { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.65; }
-
-    div[data-testid="stMetric"] {
-        background: var(--surface-1); border-radius: var(--radius); padding: 0.8rem 1rem;
-    }
-    div[data-testid="stMetric"]:nth-of-type(3) {
-        background: var(--success-bg);
-    }
-
-    .stTabs [data-baseweb="tab"] { padding: 8px 20px; font-weight: 500; }
+    .result-card-body { font-size: 0.95rem; color: #334155; line-height: 1.7; }
+    
     div.stButton > button[kind="primary"] {
-        background: #1a1a1a; border: none; font-weight: 500;
+        background: var(--text-main); border: none; font-weight: 500; border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -77,23 +91,20 @@ if "history" not in st.session_state:
 with st.sidebar:
     st.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-heading"><i class="ti ti-file-description"></i>&nbsp; About</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="sidebar-text">Upload a research paper or paste a DOI to get a structured summary '
-        'covering contribution, methodology, gaps, findings, and future directions.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="sidebar-text">Upload a research paper or paste a DOI to get a structured summary covering core contributions, methodology, gaps, findings, and future directions.</div>', unsafe_allow_html=True)
+    
     if st.session_state.history:
-        st.markdown('<hr style="margin:12px 0; border-color:var(--border);">', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-heading" style="font-size:0.8rem;">Recent papers</div>', unsafe_allow_html=True)
+        st.markdown('<hr style="margin:16px 0; border-color:var(--border-color);">', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-heading" style="font-size:0.85rem;">Recent Papers</div>', unsafe_allow_html=True)
         for item in reversed(st.session_state.history[-5:]):
-            short = item[:38] + "..." if len(item) > 38 else item
+            short = item[:38] + "..."if len(item) > 38 else item
             st.markdown(f'<div class="sidebar-recent"><i class="ti ti-file-text"></i>&nbsp; {short}</div>', unsafe_allow_html=True)
-    st.markdown('<hr style="margin:12px 0; border-color:var(--border);">', unsafe_allow_html=True)
+            
+    st.markdown('<hr style="margin:16px 0; border-color:var(--border-color);">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-footer">Built for NUST Research Directorate</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-footer">Backend: FastAPI · Llama 3.3 70B</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="app-title"><i class="ti ti-file-text" style="color:var(--accent);"></i>&nbsp; AI Research Paper Summarizer</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-title">AI Research Paper Summarizer</div>', unsafe_allow_html=True)
 st.markdown('<div class="app-subtitle">Upload a PDF or paste a DOI to get a structured summary.</div>', unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["Upload PDF", "Enter DOI"])
@@ -101,50 +112,49 @@ result = None
 
 with tab1:
     uploaded_file = st.file_uploader("Choose a PDF", type="pdf", label_visibility="collapsed")
-    if uploaded_file:
-        st.caption(f"Selected: **{uploaded_file.name}** ({uploaded_file.size / 1024:.0f} KB)")
     if uploaded_file and st.button("Summarize PDF", type="primary"):
-        with st.spinner("Reading and summarizing your paper... this can take 30-60 seconds."):
-            files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
+        with st.status("🧠 Processing Document...", expanded=True) as status:
+            st.write("Extracting and condensing text from PDF...")
+            files = {"file": (uploaded_file.name, uploaded_file.getvalue(),"application/pdf")}
+            st.write("Running local AI inference...")
             response = requests.post(API_URL, files=files)
+            
             if response.status_code == 200:
+                st.write("Parsing structured output...")
                 result = response.json()
                 st.session_state.chat_history = []
                 st.session_state.history.append(result.get("title") or uploaded_file.name)
+                status.update(label="Analysis Complete!", state="complete", expanded=False)
             else:
-                try:
-                    detail = response.json().get("detail", "Unknown error")
-                except Exception:
-                    detail = response.text or "(empty response from server)"
-                st.error(f"Error {response.status_code}: {detail}")
+                status.update(label="Generation Failed", state="error", expanded=True)
+                st.error("Processing failed.")
 
 with tab2:
     doi_input = st.text_input("Enter a DOI", placeholder="e.g. 10.1371/journal.pone.0121283", label_visibility="collapsed")
     if doi_input and st.button("Summarize DOI", type="primary"):
-        with st.spinner("Resolving DOI and summarizing... this can take 30-60 seconds."):
+        with st.status("🔍 Resolving DOI...", expanded=True) as status:
+            st.write("Fetching paper content from DOI...")
             response = requests.post(API_URL, data={"doi": doi_input})
             if response.status_code == 200:
                 result = response.json()
                 st.session_state.chat_history = []
                 st.session_state.history.append(result.get("title") or doi_input)
+                status.update(label="Analysis Complete!", state="complete", expanded=False)
             else:
-                try:
-                    detail = response.json().get("detail", "Unknown error")
-                except Exception:
-                    detail = response.text or "(empty response from server)"
-                st.error(f"Error {response.status_code}: {detail}")
+                status.update(label="Generation Failed", state="error", expanded=True)
+                st.error("Processing failed.")
 
 if result:
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown(f'<div class="paper-title">{result["title"] or "Untitled paper"}</div>', unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: var(--border-color); margin-top: 2rem;'>", unsafe_allow_html=True)
+    st.markdown(f'<div class="paper-title">{result.get("title", "Untitled paper")}</div>', unsafe_allow_html=True)
 
     original_words = len(result.get("full_text", "").split())
-    summary_words = sum(len(result[k].split()) for k in ["summary", "methodology", "research_gaps", "findings", "future_work"])
+    summary_words = sum(len(str(result[k]).split()) for k in ["summary", "methodology", "research_gaps", "findings", "future_work"])
     reduction_pct = round((1 - summary_words / original_words) * 100) if original_words else 0
     read_minutes = max(1, round(summary_words / 200))
 
     st.markdown(
-        f'<span class="tag"><i class="ti ti-file"></i> Source: {result["source"]}</span>'
+        f'<span class="tag"><i class="ti ti-file"></i> Source: {result.get("source", "PDF")}</span>'
         f'<span class="tag"><i class="ti ti-clock"></i> ~{read_minutes} min read</span>',
         unsafe_allow_html=True,
     )
@@ -167,62 +177,36 @@ if result:
         ''', unsafe_allow_html=True)
 
     with col1:
-        card("ti-notes", "Summary", result["summary"])
-        card("ti-flask", "Methodology", result["methodology"])
-        card("ti-search", "Research Gaps", result["research_gaps"])
+        card("ti-notes", "Summary", result.get("summary", ""))
+        card("ti-flask", "Methodology", result.get("methodology", ""))
+        card("ti-search", "Research Gaps", result.get("research_gaps", ""))
 
     with col2:
-        card("ti-chart-bar", "Findings", result["findings"])
-        card("ti-rocket", "Future Work", result["future_work"])
+        card("ti-chart-bar", "Findings", result.get("findings", ""))
+        card("ti-rocket", "Future Work", result.get("future_work", ""))
 
-    full_report = f"""# {result['title']}
-
-## Summary
-{result['summary']}
-
-## Methodology
-{result['methodology']}
-
-## Research Gaps
-{result['research_gaps']}
-
-## Findings
-{result['findings']}
-
-## Future Work
-{result['future_work']}
-"""
-    st.download_button("Download summary as text", data=full_report, file_name="paper_summary.txt", mime="text/plain")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-heading" style="font-size:1.05rem; margin-bottom:10px;"><i class="ti ti-message-circle"></i>&nbsp; Ask about this paper</div>', unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: var(--border-color); margin-top: 1rem;'>", unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-heading" style="font-size:1.1rem; margin-bottom:14px;"><i class="ti ti-message-circle"></i> Ask about this paper</div>', unsafe_allow_html=True)
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     if "paper_full_text" not in st.session_state:
-        st.session_state.paper_full_text = result.get("full_text", result["summary"])
+        st.session_state.paper_full_text = result.get("full_text", result.get("summary", ""))
 
     for turn in st.session_state.chat_history:
         with st.chat_message(turn["role"]):
             st.write(turn["content"])
 
-    question = st.chat_input("Ask a question about this paper...")
-    if question:
+    if question := st.chat_input("Ask a question about this paper..."):
         st.session_state.chat_history.append({"role": "user", "content": question})
         with st.spinner("Thinking..."):
-            chat_response = requests.post(
-                CHAT_URL,
-                json={
-                    "paper_text": st.session_state.paper_full_text,
-                    "question": question,
-                    "chat_history": st.session_state.chat_history,
-                },
-            )
+            chat_response = requests.post(CHAT_URL, json={
+                "paper_text": st.session_state.paper_full_text,
+                "question": question,
+                "chat_history": st.session_state.chat_history,
+            })
             if chat_response.status_code == 200:
-                answer = chat_response.json()["answer"]
-                st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                st.session_state.chat_history.append({"role": "assistant", "content": chat_response.json()["answer"]})
                 st.rerun()
-            else:
-                st.error(f"Chat failed: {chat_response.status_code}")
 else:
     st.info("Upload a PDF or enter a DOI above to get started.")

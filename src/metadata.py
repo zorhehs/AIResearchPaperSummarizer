@@ -16,6 +16,9 @@ def extract_title(text: str) -> str:
         title_lines.append(stripped)
         if len(title_lines) == 2:
             break
+    # Drop trailing author lines like "Mu Wang1*, Zhenkun Liu1,2" that got pulled in
+    while title_lines and re.search(r'\d{1,2}\s*[*†‡]?\s*$', title_lines[-1]):
+        title_lines.pop()
     return " ".join(title_lines)
 
 

@@ -2,83 +2,156 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Research Paper Summarizer</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
 <style>
   * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, "Segoe UI", sans-serif;
-    background: #ffffff; color: #1a1a1a; margin: 0; padding: 2rem 3rem;
+  :root {
+    --accent: #185FA5; --accent-dark: #104A83; --accent-soft: #F0F6FC;
+    --bg: #F6F7F9; --card: #ffffff; --border: #E7E8EC;
+    --text: #1a1a1a; --muted: #5F5E5A; --faint: #9B9A93;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
+    --shadow-lg: 0 8px 24px rgba(16,24,40,.10);
+    --serif: Georgia, "Times New Roman", serif;
   }
-  .layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; }
-  .sidebar { width: 220px; flex-shrink: 0; }
-  .sidebar-card { background: #F7F8FA; border-radius: 12px; padding: 1rem; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem 3rem; }
+
+  .layout { display: flex; gap: 28px; max-width: 1240px; margin: 0 auto; }
+  .sidebar { width: 250px; flex-shrink: 0; position: sticky; top: 2rem; align-self: flex-start; }
+  .sidebar-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2rem; }
   .sidebar-heading { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
-  .sidebar-text { font-size: 0.82rem; color: #5F5E5A; line-height: 1.6; }
-  .sidebar-recent { font-size: 0.78rem; padding: 6px 8px; border-radius: 6px; background: #fff; margin-bottom: 4px; color: #5F5E5A; }
-  .sidebar-footer { font-size: 0.75rem; color: #888780; margin: 4px 0 0; }
-  hr { border: none; border-top: 1px solid #E5E7EB; margin: 12px 0; }
+  .sidebar-text { font-size: 0.82rem; color: var(--muted); line-height: 1.65; }
+  .sidebar-recent { font-size: 0.78rem; padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 6px; color: #3B3A36; border: 1px solid transparent; transition: all .15s; cursor: default; display: flex; gap: 6px; align-items: baseline; }
+  .sidebar-recent:hover { border-color: var(--accent); color: var(--accent); }
+  .sidebar-footer { font-size: 0.74rem; color: var(--faint); margin: 4px 0 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+  /* ===== Knowledge graph ===== */
+  .kg-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-top: 14px; }
+  .kg-heading { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .kg-heading i { color: var(--accent); }
+  #kg-canvas { width: 100%; height: 260px; display: block; border-radius: 10px; background: #FBFBFC; cursor: grab; }
+  #kg-canvas:active { cursor: grabbing; }
+  .kg-empty { font-size: .78rem; color: var(--faint); line-height: 1.6; padding: 8px 2px; }
+  .kg-legend { display: flex; gap: 12px; margin-top: 8px; font-size: .7rem; color: var(--muted); }
+  .kg-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .kg-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 
   .main { flex: 1; min-width: 0; }
-  h1 { font-size: 1.9rem; margin: 0 0 4px; }
-  h1 i { color: #185FA5; margin-right: 8px; }
-  .subtitle { color: #5F5E5A; font-size: 0.95rem; margin-bottom: 20px; }
-
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #E5E7EB; margin-bottom: 16px; }
-  .tab { padding: 8px 16px; font-size: 14px; cursor: pointer; color: #5F5E5A; }
-  .tab.active { color: #185FA5; font-weight: 500; border-bottom: 2px solid #185FA5; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; line-height: 1.2; display: flex; align-items: center; }
+  h1 i { color: var(--accent); margin-right: 10px; font-size: 1.6rem; position: relative; top: 1px; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin: 0 0 20px; padding-left: 2px; }
+  /* ===== Input panel ===== */
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem 1.6rem; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .tab { padding: 9px 18px; font-size: 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; user-select: none; }
+  .tab:hover { color: var(--accent); }
+  .tab.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  .dropzone {
-    border: 1px dashed #B4B2A9; border-radius: 8px; padding: 14px 16px;
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer;
-  }
-  .dropzone-left { display: flex; align-items: center; gap: 10px; }
-  .dropzone i { font-size: 22px; color: #888780; }
-  .dropzone p { margin: 0; font-size: 14px; }
-  .dropzone .hint { font-size: 12px; color: #888780; }
+  .dropzone { border: 1.5px dashed #C5C3BA; border-radius: 12px; padding: 24px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; transition: all .15s; background: #FBFBFC; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+  .dropzone.dragover { border-style: solid; }
+  .dropzone-left { display: flex; align-items: center; gap: 12px; }
+  .dropzone > .dropzone-left > i { font-size: 26px; color: var(--faint); }
+  .dropzone:hover .dropzone-left > i, .dropzone.dragover .dropzone-left > i { color: var(--accent); }
+  .dropzone p { margin: 0; font-size: 14px; font-weight: 500; }
+  .dropzone .hint { font-size: 12px; color: var(--faint); font-weight: 400; }
 
-  button {
-    background: #1a1a1a; color: white; border: none; border-radius: 6px;
-    padding: 9px 20px; font-size: 14px; font-weight: 500; cursor: pointer;
-  }
-  button.secondary { background: #fff; color: #1a1a1a; border: 1px solid #E5E7EB; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  input[type="text"] {
-    width: 100%; padding: 9px 12px; border: 1px solid #E5E7EB; border-radius: 6px;
-    font-size: 14px; margin-bottom: 12px;
-  }
+  button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 22px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s, transform .05s, box-shadow .15s; }
+  button:hover:not(:disabled) { background: var(--accent-dark); box-shadow: 0 2px 8px rgba(24,95,165,.3); }
+  button:active:not(:disabled) { transform: scale(.98); }
+  button.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover:not(:disabled) { background: var(--bg); box-shadow: none; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type="text"] { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; transition: border .15s, box-shadow .15s; }
+  input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,.12); }
+  .filename { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
 
-  .filename { font-size: 13px; color: #5F5E5A; margin-bottom: 12px; }
+  /* ===== Thinking loader ===== */
+  .thinking { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 34px; margin: 24px 0; }
+  .thinking-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .thinking-orb { width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 32% 30%, #7FB4E8, var(--accent) 60%, var(--accent-dark)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 22px; flex-shrink: 0; animation: orbPulse 2.2s ease-in-out infinite; }
+  @keyframes orbPulse { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(24,95,165,.35); } 50% { transform: scale(1.08); box-shadow: 0 0 0 14px rgba(24,95,165,0); } }
+  .thinking-title { font-size: 1.1rem; font-weight: 600; }
+  .thinking-title .dots::after { content: ''; animation: dots 1.4s steps(1, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+  .thinking-sub { font-size: .8rem; color: var(--faint); margin-top: 2px; }
+  .thinking-steps { border-left: 2px solid var(--border); margin-left: 10px; padding-left: 0; }
+  .thinking-step { display: flex; align-items: flex-start; gap: 12px; padding: 7px 0 7px 18px; position: relative; font-size: .88rem; color: var(--faint); opacity: 0; transform: translateY(4px); transition: opacity .35s, transform .35s, color .35s; }
+  .thinking-step.visible { opacity: 1; transform: none; }
+  .thinking-step::before { content: ''; position: absolute; left: -6px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: background .3s; }
+  .thinking-step.active { color: var(--text); }
+  .thinking-step.active::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,.18); animation: dotPulse 1.4s ease-in-out infinite; }
+  .thinking-step.done { color: var(--muted); }
+  .thinking-step.done::before { background: #6FBF4E; }
+  @keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 3px rgba(24,95,165,.18); } 50% { box-shadow: 0 0 0 6px rgba(24,95,165,.06); } }
+  .thinking-step .status-icon { width: 18px; flex-shrink: 0; text-align: center; }
+  .thinking-step .status-icon .ti-loader-2 { display: inline-block; animation: spin 1.2s linear infinite; color: var(--accent); }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  .thinking-step .cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); margin-left: 2px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  .thinking-bar { height: 5px; border-radius: 3px; background: var(--bg); overflow: hidden; margin: 22px 0 0; position: relative; }
+  .thinking-bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: shimmer 1.4s linear infinite; }
+  @keyframes shimmer { 0% { left: -40%; } 100% { left: 100%; } }
+  /* ===== Results (research paper style) ===== */
+  .paper-header { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.6rem 1.9rem; margin-bottom: 14px; }
+  .paper-title { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; margin: 0 0 10px; line-height: 1.35; }
+  .paper-authors { font-family: var(--serif); font-style: italic; font-size: .9rem; color: var(--muted); margin: -4px 0 12px; }
+  .tag { display: inline-flex; align-items: center; gap: 5px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); padding: 3px 11px; border-radius: 20px; font-size: 0.75rem; margin-right: 6px; }
+  .paper-abstract { font-family: var(--serif); font-size: 0.9rem; color: #3B3A36; line-height: 1.75; border-left: 2px solid var(--accent); padding: 4px 0 4px 16px; margin-top: 16px; }
+  .paper-abstract .abs-label { font-weight: 700; color: var(--text); }
 
-  .paper-title { font-size: 1.4rem; font-weight: 700; margin: 20px 0 6px; }
-  .tag { display: inline-block; background: #F7F8FA; color: #5F5E5A; padding: 3px 12px; border-radius: 12px; font-size: 0.78rem; margin-right: 6px; }
+  .stats { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 1.9rem; margin-bottom: 14px; font-size: .85rem; color: var(--muted); flex-wrap: wrap; }
+  .stats .stat { display: inline-flex; align-items: baseline; gap: 5px; }
+  .stats .stat b { color: var(--text); font-weight: 600; font-size: .95rem; }
+  .stats .stat.saved b { color: #3B6D11; }
+  .stats .sep { color: var(--border); }
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
-  .stat-card { background: #F7F8FA; border-radius: 8px; padding: 12px; }
-  .stat-card.success { background: #EAF3DE; }
-  .stat-label { font-size: 12px; color: #5F5E5A; margin: 0 0 2px; }
-  .stat-value { font-size: 20px; font-weight: 500; margin: 0; }
-  .stat-card.success .stat-value { color: #3B6D11; }
+  .paper-body { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: .3rem 1.9rem .6rem; margin-bottom: 14px; }
+  .result-card { padding: 20px 0 18px; border-bottom: 1px solid var(--border); }
+  .result-card:last-child { border-bottom: none; }
+  .result-card-header { font-family: var(--serif); font-size: 1.05rem; font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .result-card-header .section-num { color: var(--accent); font-weight: 400; margin-right: 8px; }
+  .result-card-header .copy-btn { cursor: pointer; color: #C9C8C1; font-size: 14px; transition: color .15s; }
+  .result-card-header .copy-btn:hover { color: var(--accent); }
+  .result-card-body { font-family: var(--serif); font-size: 0.93rem; color: #2B2A27; line-height: 1.75; }
+  .result-card-body p { margin: 0 0 10px; }
+  .result-card-body ul, .result-card-body ol { margin: 2px 0 8px; padding-left: 20px; }
+  .result-card-body li { margin-bottom: 6px; padding-left: 2px; }
+  .result-card-body li::marker { color: var(--accent); }
 
-  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-  .result-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; }
-  .result-card-header { display: flex; align-items: center; justify-content: space-between; font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; color: #0C447C; }
-  .result-card-header .copy-btn { cursor: pointer; color: #888780; font-size: 14px; }
-  .result-card-body { font-size: 0.88rem; color: #5F5E5A; line-height: 1.65; white-space: pre-wrap; }
+  .actions-row { display: flex; gap: 8px; margin-bottom: 18px; }
+  .actions-row button { padding: 8px 16px; font-size: 13px; }
+  .error-box { background: #FCEBEB; color: #791F1F; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 14px; border: 1px solid #F5C8C8; }
+  .error-box i { margin-right: 6px; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--faint); }
+  .empty-state i { font-size: 44px; margin-bottom: 12px; display: block; }
 
-  .chat-section { margin-top: 24px; border-top: 1px solid #E5E7EB; padding-top: 16px; }
-  .chat-heading { font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; }
-  .chat-bubble { border-radius: 12px; padding: 10px 14px; max-width: 75%; font-size: 13px; margin-bottom: 8px; }
-  .chat-bubble.user { background: #F7F8FA; }
-  .chat-bubble.assistant { background: #E6F1FB; color: #0C447C; margin-left: auto; }
-  .chat-input-row { display: flex; gap: 8px; margin-top: 12px; }
+  /* ===== Chat ===== */
+  .chat-section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem 1.6rem; }
+  .chat-heading { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .chat-heading i { color: var(--accent); }
+  .chat-bubble { border-radius: 14px; padding: 11px 15px; max-width: 78%; font-size: 13.5px; margin-bottom: 10px; line-height: 1.6; }
+  .chat-bubble.user { background: var(--bg); border: 1px solid var(--border); border-bottom-right-radius: 4px; margin-left: auto; }
+  .chat-bubble.assistant { background: var(--accent-soft); color: var(--accent-dark); border-bottom-left-radius: 4px; }
+  .chat-bubble.typing span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px; opacity: .4; animation: blink 1.2s infinite; }
+  .chat-bubble.typing span:nth-child(2) { animation-delay: .2s; }
+  .chat-bubble.typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+  .chat-input-row { display: flex; gap: 8px; margin-top: 14px; }
   .chat-input-row input { margin-bottom: 0; flex: 1; }
 
-  .loading { text-align: center; padding: 40px; color: #5F5E5A; }
-  .error-box { background: #FCEBEB; color: #791F1F; padding: 12px 16px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
-  .empty-state { text-align: center; padding: 60px; color: #888780; }
+  @media (max-width: 900px) {
+    body { padding: 0 1rem; }
+    .layout { flex-direction: column; margin-top: 1.2rem; }
+    .sidebar { width: 100%; position: static; }
+    .stats { grid-template-columns: 1fr; }
+    .paper-header, .paper-body { padding-left: 1.2rem; padding-right: 1.2rem; }
+  }
+
 </style>
 </head>
 <body>
@@ -89,11 +162,22 @@
       <div class="sidebar-heading"><i class="ti ti-file-description"></i> About</div>
       <div class="sidebar-text">Upload a research paper or paste a DOI to get a structured summary covering contribution, methodology, gaps, findings, and future directions.</div>
       <hr>
-      <div class="sidebar-heading" style="font-size:0.8rem;">Recent papers</div>
-      <div id="recent-list"></div>
+      <div class="sidebar-heading" style="font-size:0.85rem;">Recent papers</div>
+      <div id="recent-list"><div class="sidebar-footer">Nothing yet — summarize your first paper.</div></div>
       <hr>
       <div class="sidebar-footer">Built for NUST Research Directorate</div>
-      <div class="sidebar-footer">Backend: FastAPI · Llama 3.3 70B</div>
+    </div>
+
+    <div class="kg-card">
+      <div class="kg-heading"><i class="ti ti-topology-star-3"></i> Paper graph</div>
+      <canvas id="kg-canvas" width="420" height="500"></canvas>
+      <div id="kg-legend" class="kg-legend" style="display:none;">
+        <span><span class="kg-dot" style="background:#185FA5;"></span> Paper</span>
+        <span><span class="kg-dot" style="background:#3B6D11;"></span> Section</span>
+        <span><span class="kg-dot" style="background:#B0791A;"></span> Author</span>
+        <span><span class="kg-dot" style="background:#8A887F;"></span> Concept</span>
+      </div>
+      <div id="kg-empty" class="kg-empty">Summarize a paper to see its knowledge graph — sections and key concepts linked to the paper node.</div>
     </div>
   </div>
 
@@ -101,38 +185,53 @@
     <h1><i class="ti ti-file-text"></i>AI Research Paper Summarizer</h1>
     <div class="subtitle">Upload a PDF or paste a DOI to get a structured summary.</div>
 
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('pdf')">Upload PDF</div>
-      <div class="tab" onclick="switchTab('doi')">Enter DOI</div>
-    </div>
-
-    <div id="tab-pdf" class="tab-content active">
-      <div class="dropzone" onclick="document.getElementById('file-input').click()">
-        <div class="dropzone-left">
-          <i class="ti ti-cloud-upload"></i>
-          <div><p>Click to choose a PDF</p><p class="hint">PDF files only</p></div>
-        </div>
-        <button class="secondary" type="button">Browse files</button>
+    <div class="panel">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('pdf')">Upload PDF</div>
+        <div class="tab" onclick="switchTab('doi')">Enter DOI</div>
       </div>
-      <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
-      <div id="filename" class="filename"></div>
-      <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled>Summarize PDF</button>
+
+      <div id="tab-pdf" class="tab-content active">
+        <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
+          <div class="dropzone-left">
+            <i class="ti ti-cloud-upload"></i>
+            <div><p>Click to choose a PDF, or drag &amp; drop it here</p><p class="hint">PDF files only</p></div>
+          </div>
+          <button class="secondary" type="button">Browse files</button>
+        </div>
+        <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
+        <div id="filename" class="filename"></div>
+        <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled><i class="ti ti-sparkles"></i> Summarize PDF</button>
+      </div>
+
+      <div id="tab-doi" class="tab-content">
+        <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
+        <button id="summarize-doi-btn" onclick="summarizeDoi()"><i class="ti ti-sparkles"></i> Summarize DOI</button>
+      </div>
     </div>
 
-    <div id="tab-doi" class="tab-content">
-      <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
-      <button onclick="summarizeDoi()">Summarize DOI</button>
+    <div id="results-area">
+      <div class="empty-state">
+        <i class="ti ti-file-search"></i>
+        <div style="font-weight:600; font-size:1.05rem; color:var(--muted);">No paper summarized yet</div>
+        <div style="font-size:.85rem; margin-top:6px;">Your structured summary will appear here.</div>
+      </div>
     </div>
-
-    <div id="results-area"></div>
   </div>
 </div>
-
 <script>
 let selectedFile = null;
 let currentPaperText = "";
 let chatHistory = [];
 let recentPapers = [];
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+const API_BASE = ""; // same origin as the FastAPI server serving this page
 
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -141,127 +240,291 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
 }
 
-function onFileSelected() {
-  const input = document.getElementById('file-input');
-  selectedFile = input.files[0];
-  if (selectedFile) {
-    document.getElementById('filename').textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)`;
-    document.getElementById('summarize-pdf-btn').disabled = false;
+function setSelectedFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showError('<i class="ti ti-alert-circle"></i> Please choose a PDF file.');
+    return;
   }
+  selectedFile = file;
+  document.getElementById('filename').textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  document.getElementById('summarize-pdf-btn').disabled = false;
 }
 
-function showLoading() {
-  document.getElementById('results-area').innerHTML = '<div class="loading"><i class="ti ti-loader-2"></i> Reading and summarizing your paper... this can take 30-60 seconds.</div>';
+function onFileSelected() {
+  setSelectedFile(document.getElementById('file-input').files[0]);
+}
+
+// Drag & drop support
+window.addEventListener('DOMContentLoaded', () => {
+  const dz = document.getElementById('dropzone');
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.remove('dragover');
+  }));
+  dz.addEventListener('drop', e => setSelectedFile(e.dataTransfer.files[0]));
+});
+
+let loadingInterval = null;
+let thinkingTimeout = null;
+let isBusy = false;
+
+function showThinking() {
+  // LLM-style chain-of-thought lines, revealed top to bottom
+  const steps = [
+    "Okay, let me start by reading through the paper...",
+    "Skimming the abstract — so the core contribution seems to be...",
+    "Now let me trace how they actually ran the study: data, model, experiments...",
+    "Checking the results tables... what did they really demonstrate?",
+    "Hmm, where does this fall short? Let me note the limitations and open questions...",
+    "What would I try next if I were the authors?...",
+    "Alright, I have the full picture — writing up the structured summary now."
+  ];
+  let current = 0;
+  let typeTimer = null;
+
+  document.getElementById('results-area').innerHTML = `
+    <div class="thinking">
+      <div class="thinking-header">
+        <div class="thinking-orb"><i class="ti ti-brain"></i></div>
+        <div>
+          <div class="thinking-title">The AI is thinking<span class="dots"></span></div>
+          <div class="thinking-sub">Reasoning through the paper step by step</div>
+        </div>
+      </div>
+      <div class="thinking-steps" id="thinking-steps"></div>
+      <div class="thinking-bar"></div>
+    </div>
+  `;
+  resultsIntoView();
+
+  if (loadingInterval) clearInterval(loadingInterval);
+
+  const typeText = (el, text) => {
+    let i = 0;
+    el.innerHTML = '<span class="text"></span><span class="cursor"></span>';
+    const target = el.querySelector('.text');
+    clearInterval(typeTimer);
+    typeTimer = setInterval(() => {
+      if (!document.getElementById('thinking-steps')) { clearInterval(typeTimer); return; }
+      i++;
+      target.textContent = text.slice(0, i);
+      if (i >= text.length) clearInterval(typeTimer);
+    }, 18);
+  };
+
+  const advance = () => {
+    if (!document.getElementById('thinking-steps')) return;
+
+    if (current > 0) {
+      const prev = document.querySelector(`.thinking-step[data-i="${current - 1}"]`);
+      if (prev) {
+        prev.classList.remove('active');
+        prev.classList.add('done');
+        prev.querySelector('.status-icon').innerHTML = '<i class="ti ti-check"></i>';
+      }
+    }
+
+    if (current >= steps.length) {
+      clearInterval(loadingInterval);
+      return;
+    }
+
+    const step = document.createElement('div');
+    step.className = 'thinking-step active';
+    step.dataset.i = current;
+    step.innerHTML = `<span class="status-icon"><i class="ti ti-loader-2"></i></span><span class="step-text"></span>`;
+    document.getElementById('thinking-steps').appendChild(step);
+    requestAnimationFrame(() => step.classList.add('visible'));
+    typeText(step.querySelector('.step-text'), steps[current]);
+
+    current++;
+    const delay = current === 1 ? 3200 : 4200 + Math.random() * 2000;
+    thinkingTimeout = setTimeout(advance, delay);
+  };
+
+  // kick things off
+  thinkingTimeout = setTimeout(advance, 300);
+}
+
+function clearLoader() {
+  if (loadingInterval) { clearInterval(loadingInterval); loadingInterval = null; }
+  if (thinkingTimeout) { clearTimeout(thinkingTimeout); thinkingTimeout = null; }
 }
 
 function showError(msg) {
+  clearLoader();
   document.getElementById('results-area').innerHTML = `<div class="error-box">${msg}</div>`;
+}
+
+function resultsIntoView() {
+  document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function setBusy(busy) {
+  isBusy = busy;
+  const pdfBtn = document.getElementById('summarize-pdf-btn');
+  if (pdfBtn) pdfBtn.disabled = busy || !selectedFile;
+  const doiBtn = document.getElementById('summarize-doi-btn');
+  if (doiBtn) doiBtn.disabled = busy;
+}
+
+async function runSummarize(formData, label) {
+  if (isBusy) return;
+  setBusy(true);
+  showThinking();
+  try {
+    const res = await fetch(`${API_BASE}/summarize`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      renderResults(data);
+      addRecent(data.title || label);
+    } else {
+      showError(`<i class="ti ti-alert-circle"></i> <strong>Error ${res.status}.</strong> ${escapeHtml(data.detail || 'Unknown error')}`);
+    }
+  } catch (e) {
+    showError(`<i class="ti ti-plug-off"></i> Could not reach the server: ${escapeHtml(e.message)}. Is it still running?`);
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function summarizePdf() {
   if (!selectedFile) return;
-  showLoading();
   const formData = new FormData();
   formData.append('file', selectedFile);
-  try {
-    const res = await fetch('http://127.0.0.1:8000/summarize', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (res.ok) {
-      renderResults(data);
-      addRecent(data.title || selectedFile.name);
-    } else {
-      showError(`Error ${res.status}: ${data.detail || 'Unknown error'}`);
-    }
-  } catch (e) {
-    showError(`Request failed: ${e.message}`);
-  }
+  await runSummarize(formData, selectedFile.name);
 }
 
 async function summarizeDoi() {
   const doi = document.getElementById('doi-input').value.trim();
   if (!doi) return;
-  showLoading();
   const formData = new FormData();
   formData.append('doi', doi);
-  try {
-    const res = await fetch('http://127.0.0.1:8000/summarize', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (res.ok) {
-      renderResults(data);
-      addRecent(data.title || doi);
-    } else {
-      showError(`Error ${res.status}: ${data.detail || 'Unknown error'}`);
-    }
-  } catch (e) {
-    showError(`Request failed: ${e.message}`);
-  }
+  await runSummarize(formData, doi);
 }
 
 function addRecent(title) {
   recentPapers.unshift(title);
   recentPapers = recentPapers.slice(0, 5);
-  document.getElementById('recent-list').innerHTML = recentPapers
-    .map(t => `<div class="sidebar-recent"><i class="ti ti-file-text"></i> ${t.slice(0, 38)}${t.length > 38 ? '...' : ''}</div>`)
-    .join('');
+  try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers)); } catch (e) {}
+  renderRecent();
 }
 
+function loadRecent() {
+  try { recentPapers = JSON.parse(localStorage.getItem('recent_papers') || '[]'); } catch (e) { recentPapers = []; }
+  renderRecent();
+}
+
+function renderRecent() {
+  document.getElementById('recent-list').innerHTML = recentPapers.length
+    ? recentPapers
+        .map(t => `<div class="sidebar-recent"><i class="ti ti-file-text"></i> <span>${escapeHtml(String(t).slice(0, 40))}${String(t).length > 40 ? '…' : ''}</span></div>`)
+        .join('')
+    : '<div class="sidebar-footer">Nothing yet — summarize your first paper.</div>';
+}
+
+loadRecent();
 function renderResults(data) {
-  currentPaperText = data.full_text || data.summary;
+  clearLoader();
+  currentPaperText = data.full_text || data.summary || "";
   chatHistory = [];
 
-  const originalWords = (data.full_text || "").split(/\s+/).filter(Boolean).length;
+  const fieldText = k => (data[k] == null ? "" : String(data[k]));
+  const originalWords = currentPaperText.split(/\s+/).filter(Boolean).length;
   const summaryWords = ["summary","methodology","research_gaps","findings","future_work"]
-    .reduce((sum, k) => sum + data[k].split(/\s+/).filter(Boolean).length, 0);
-  const reduction = originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0;
+    .reduce((sum, k) => sum + fieldText(k).split(/\s+/).filter(Boolean).length, 0);
+  const reduction = Math.min(99, originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0);
   const readMin = Math.max(1, Math.round(summaryWords / 200));
 
   document.getElementById('results-area').innerHTML = `
-    <hr>
-    <div class="paper-title">${data.title || "Untitled paper"}</div>
-    <span class="tag"><i class="ti ti-file"></i> Source: ${data.source}</span>
-    <span class="tag"><i class="ti ti-clock"></i> ~${readMin} min read</span>
+    <div class="paper-header">
+      <div class="paper-title">${escapeHtml(data.title || "Untitled paper")}</div>
+      ${data.authors && data.authors.length ? `<div class="paper-authors">${escapeHtml(data.authors.join(", "))}</div>` : ""}
+      <span class="tag"><i class="ti ti-file"></i> Source: ${escapeHtml(data.source || "unknown")}</span>
+      ${data.year ? `<span class="tag"><i class="ti ti-calendar"></i> ${escapeHtml(data.year)}</span>` : ""}
+      ${data.journal ? `<span class="tag"><i class="ti ti-book"></i> ${escapeHtml(data.journal)}</span>` : ""}
+      ${data.cited_by != null ? `<span class="tag"><i class="ti ti-quote"></i> ${data.cited_by} citations</span>` : ""}
+      ${data.cached ? `<span class="tag" style="border-color:#D5E8BC;color:#3B6D11;"><i class="ti ti-bolt"></i> cached</span>` : ""}
+      <span class="tag"><i class="ti ti-clock"></i> ~${readMin} min read</span>
+      ${data.abstract ? `<div class="paper-abstract"><span class="abs-label">Abstract.</span> ${escapeHtml(data.abstract)}</div>` : ""}
+    </div>
 
     <div class="stats">
-      <div class="stat-card"><p class="stat-label">Original length</p><p class="stat-value">${originalWords.toLocaleString()} words</p></div>
-      <div class="stat-card"><p class="stat-label">Summary length</p><p class="stat-value">${summaryWords.toLocaleString()} words</p></div>
-      <div class="stat-card success"><p class="stat-label">Time saved</p><p class="stat-value">~${reduction}%</p></div>
+      <span class="stat"><b>${originalWords.toLocaleString()}</b> words original</span>
+      <span class="sep">·</span>
+      <span class="stat"><b>${summaryWords.toLocaleString()}</b> words summary</span>
+      <span class="sep">·</span>
+      <span class="stat saved"><b>~${reduction}%</b> time saved</span>
+      <span class="sep">·</span>
+      <span class="stat"><b>~${readMin}</b> min read</span>
     </div>
 
-    <div class="results">
-      <div>
-        ${card("ti-notes", "Summary", data.summary)}
-        ${card("ti-flask", "Methodology", data.methodology)}
-        ${card("ti-search", "Research Gaps", data.research_gaps)}
-      </div>
-      <div>
-        ${card("ti-chart-bar", "Findings", data.findings)}
-        ${card("ti-rocket", "Future Work", data.future_work)}
-      </div>
+    <div class="paper-body">
+      ${card(1, "Summary", fieldText("summary"))}
+      ${card(2, "Methodology", fieldText("methodology"))}
+      ${card(3, "Research Gaps", fieldText("research_gaps"))}
+      ${card(4, "Findings", fieldText("findings"))}
+      ${card(5, "Future Work", fieldText("future_work"))}
     </div>
 
-    <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i> Download as text</button>
+    <div class="actions-row">
+      <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i> Download as text</button>
+      <button class="secondary" onclick="copyAll()"><i class="ti ti-copy"></i> Copy full summary</button>
+    </div>
 
     <div class="chat-section">
       <div class="chat-heading"><i class="ti ti-message-circle"></i> Ask about this paper</div>
       <div id="chat-messages"></div>
       <div class="chat-input-row">
         <input type="text" id="chat-input" placeholder="Ask a question about this paper..." onkeypress="if(event.key==='Enter') sendChat()">
-        <button onclick="sendChat()">Send</button>
+        <button onclick="sendChat()"><i class="ti ti-send"></i> Send</button>
       </div>
     </div>
   `;
 
   window.currentResult = data;
+  resultsIntoView();
+  kgStart(data);
+}
+// Turn plain-text output into proper HTML lists where the model used
+// "- " bullets or "1." numbered lines; keep paragraphs for prose.
+function formatBody(raw) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  let html = '';
+  let list = null; // 'ul' | 'ol'
+  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+  for (const rawLine of lines) {
+    const line = escapeHtml(rawLine);
+    const bullet = line.match(/^[•\-*]\s+(.*)$/);
+    const numbered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (bullet) {
+      if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; }
+      html += `<li>${bullet[1]}</li>`;
+    } else if (numbered) {
+      if (list !== 'ol') { closeList(); html += '<ol>'; list = 'ol'; }
+      html += `<li>${numbered[1]}</li>`;
+    } else {
+      closeList();
+      html += `<p>${line}</p>`;
+    }
+  }
+  closeList();
+  return html;
 }
 
-function card(icon, title, body) {
+function card(num, title, body) {
+  const text = String(body == null ? "" : body).trim();
+  if (!text || text === "Data not provided by the model.") return ""; // skip empty sections
   return `
     <div class="result-card">
       <div class="result-card-header">
-        <span><i class="ti ${icon}"></i> ${title}</span>
-        <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(body)}"></i>
+        <span><span class="section-num">${num}.</span> ${escapeHtml(title)}</span>
+        <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(text)}"></i>
       </div>
-      <div class="result-card-body">${body}</div>
+      <div class="result-card-body">${formatBody(text)}</div>
     </div>
   `;
 }
@@ -272,28 +535,39 @@ function copyText(el) {
   el.className = 'ti ti-check copy-btn';
   setTimeout(() => { el.className = 'ti ti-copy copy-btn'; }, 1500);
 }
+function copyAll() {
+  const d = window.currentResult;
+  if (!d) return;
+  const text = `1. Summary\n${d.summary}\n\n2. Methodology\n${d.methodology}\n\n3. Research Gaps\n${d.research_gaps}\n\n4. Findings\n${d.findings}\n\n5. Future Work\n${d.future_work}`;
+  navigator.clipboard.writeText(text);
+}
 
 function downloadSummary() {
   const d = window.currentResult;
-  const report = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Future Work\n${d.future_work}`;
+  if (!d) return;
+  const report = `# ${d.title}\n\n## Abstract\n${d.abstract || ''}\n\n## 1. Summary\n${d.summary}\n\n## 2. Methodology\n${d.methodology}\n\n## 3. Research Gaps\n${d.research_gaps}\n\n## 4. Findings\n${d.findings}\n\n## 5. Future Work\n${d.future_work}`;
   const blob = new Blob([report], { type: 'text/plain' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'paper_summary.txt';
   link.click();
 }
-
 async function sendChat() {
   const input = document.getElementById('chat-input');
+  const sendBtn = input.parentElement.querySelector('button');
   const question = input.value.trim();
-  if (!question) return;
+  if (!question || sendBtn.disabled) return;
   input.value = '';
+  sendBtn.disabled = true;
 
   chatHistory.push({ role: 'user', content: question });
   renderChat();
+  const box = document.getElementById('chat-messages');
+  box.insertAdjacentHTML('beforeend', '<div class="chat-bubble assistant typing" id="chat-typing"><span></span><span></span><span></span></div>');
+  box.scrollTop = box.scrollHeight;
 
   try {
-    const res = await fetch('http://127.0.0.1:8000/chat', {
+    const res = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
@@ -301,19 +575,207 @@ async function sendChat() {
     const data = await res.json();
     if (res.ok) {
       chatHistory.push({ role: 'assistant', content: data.answer });
-      renderChat();
+    } else {
+      chatHistory.push({ role: 'assistant', content: `⚠️ ${data.detail || 'Something went wrong. Please try again.'}` });
     }
   } catch (e) {
-    console.error(e);
+    chatHistory.push({ role: 'assistant', content: `⚠️ Could not reach the server: ${e.message}` });
+  } finally {
+    sendBtn.disabled = false;
+    renderChat();
   }
 }
 
 function renderChat() {
-  document.getElementById('chat-messages').innerHTML = chatHistory
-    .map(m => `<div class="chat-bubble ${m.role}">${m.content}</div>`)
+  const box = document.getElementById('chat-messages');
+  box.innerHTML = chatHistory
+    .map(m => `<div class="chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`)
     .join('');
+  box.scrollTop = box.scrollHeight;
+}
+/* ===== Obsidian-like knowledge graph ===== */
+let kgSim = null; // { nodes, edges, canvas, ctx, raf, drag }
+
+function kgStop() {
+  if (kgSim) { cancelAnimationFrame(kgSim.raf); kgSim = null; }
+}
+
+function kgExtractConcepts(text, max = 8) {
+  const stop = new Set('the a an and or of in on for with to from by is are was were be been this that these those we our their its it as at not which can may using used use based paper study research results result method methods approach proposed propose show shows shown suggest suggests however also such into than then when while between among each other more most less least has have had do does did section figure table eq et al ii iii'.split(' '));
+  const counts = {};
+  (text.toLowerCase().match(/[a-z][a-z-]{3,}/g) || []).forEach(w => {
+    if (stop.has(w)) return;
+    counts[w] = (counts[w] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, max)
+    .map(([w]) => w[0].toUpperCase() + w.slice(1));
+}
+function kgBuild(data) {
+  const nodes = [];
+  const edges = [];
+  const add = (id, label, type, r) => { const n = { id, label, type, r }; nodes.push(n); return n; };
+
+  const paper = add('paper', (data.title || 'Untitled paper').slice(0, 42), 'paper', 13);
+
+  // Author nodes (available for DOI lookups via Crossref)
+  const authorNodes = [];
+  for (const a of (data.authors || []).slice(0, 6)) {
+    const n = add('auth:' + a, a, 'author', 7);
+    authorNodes.push(n);
+    edges.push([paper, n]);
+  }
+
+  const sections = [['summary', 'Summary'], ['methodology', 'Methodology'], ['research_gaps', 'Gaps'], ['findings', 'Findings'], ['future_work', 'Future Work']];
+  const secNodes = [];
+  for (const [key, label] of sections) {
+    const text = String(data[key] || '').trim();
+    if (!text || text === 'Data not provided by the model.') continue;
+    const n = add('sec:' + key, label, 'section', 8);
+    secNodes.push(n);
+    edges.push([paper, n]);
+  }
+
+  // Citations context node
+  if (data.cited_by != null) {
+    const n = add('cite', `Cited by ${data.cited_by}`, 'concept', 7);
+    edges.push([paper, n]);
+  }
+
+  for (const c of kgExtractConcepts(currentPaperText || data.summary || '')) {
+    const n = add('con:' + c, c, 'concept', 5.5);
+    edges.push([paper, n]);
+    if (secNodes.length) edges.push([secNodes[Math.floor(Math.random() * secNodes.length)], n]);
+  }
+
+  return { nodes, edges };
+}
+function kgStart(data) {
+  kgStop();
+  const canvas = document.getElementById('kg-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const built = kgBuild(data);
+  kgSim = { ...built, canvas, ctx, raf: null, drag: null };
+  const { nodes, edges } = kgSim;
+
+  // initial layout: paper center, others in a ring
+  nodes[0].x = W / 2; nodes[0].y = H / 2; nodes[0].vx = 0; nodes[0].vy = 0;
+  nodes.slice(1).forEach((n, i) => {
+    const a = (2 * Math.PI * i) / (nodes.length - 1);
+    n.x = W / 2 + Math.cos(a) * 130;
+    n.y = H / 2 + Math.sin(a) * 150;
+    n.vx = 0; n.vy = 0;
+  });
+
+  const step = () => {
+    if (!kgSim) return;
+    let energy = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = a.x - b.x, dy = a.y - b.y;
+        const d2 = dx * dx + dy * dy || 1;
+        const minD = (a.r + b.r) * 3.5;
+        if (d2 < minD * minD) {
+          const f = Math.min(2.5, minD * minD / (d2 * 14));
+          const d = Math.sqrt(d2);
+          dx /= d; dy /= d;
+          a.vx += dx * f; a.vy += dy * f;
+          b.vx -= dx * f; b.vy -= dy * f;
+        }
+      }
+    }
+    for (const [a, b] of edges) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const f = Math.min(1.2, (d - 85) * 0.015);
+      a.vx += (dx / d) * f; a.vy += (dy / d) * f;
+      b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
+    }
+    for (const n of nodes) {
+      const g = n.type === 'paper' ? 0.02 : 0.008;
+      n.vx += (W / 2 - n.x) * g * 0.12;
+      n.vy += (H / 2 - n.y) * g * 0.12;
+      n.vx *= 0.82; n.vy *= 0.82;
+      // clamp speed so the graph never explodes
+      const sp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+      if (sp > 4) { n.vx = n.vx / sp * 4; n.vy = n.vy / sp * 4; }
+      n.x += n.vx; n.y += n.vy;
+      energy += n.vx * n.vx + n.vy * n.vy;
+      const pad = n.r + 16;
+      n.x = Math.max(pad, Math.min(W - pad, n.x));
+      n.y = Math.max(pad + 6, Math.min(H - pad - 10, n.y));
+    }
+    kgDraw();
+    // settle: stop the sim when quiet, restart it on drag
+    if (energy < 0.4 && !kgSim.drag) { kgSim.settled = true; return; }
+    kgSim.raf = requestAnimationFrame(step);
+  };
+  step();
+
+  canvas.onmousedown = e => {
+    const n = kgNodeAt(kgPos(e));
+    if (n) { kgSim.drag = n; e.preventDefault(); }
+  };
+  canvas.onmousemove = e => {
+    if (!kgSim) return;
+    if (kgSim.drag) {
+      const p = kgPos(e);
+      kgSim.drag.x = p.x; kgSim.drag.y = p.y; kgSim.drag.vx = 0; kgSim.drag.vy = 0;
+      if (kgSim.settled) { kgSim.settled = false; kgSim.raf = requestAnimationFrame(step); }
+    } else {
+      canvas.style.cursor = kgNodeAt(kgPos(e)) ? 'pointer' : 'grab';
+    }
+  };
+  window.addEventListener('mouseup', kgRelease);
+
+  document.getElementById('kg-empty').style.display = 'none';
+  document.getElementById('kg-legend').style.display = 'flex';
+}
+
+function kgRelease() { if (kgSim) kgSim.drag = null; }
+function kgPos(e) {
+  const rect = kgSim.canvas.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) * (kgSim.canvas.width / rect.width), y: (e.clientY - rect.top) * (kgSim.canvas.height / rect.height) };
+}
+
+function kgNodeAt(p) {
+  if (!kgSim) return null;
+  for (let i = kgSim.nodes.length - 1; i >= 0; i--) {
+    const n = kgSim.nodes[i];
+    const dx = p.x - n.x, dy = p.y - n.y;
+    if (dx * dx + dy * dy < (n.r + 6) ** 2) return n;
+  }
+  return null;
+}
+
+function kgDraw() {
+  const { ctx, nodes, edges, canvas } = kgSim;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#FBFBFC';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(24,95,165,.22)';
+  ctx.lineWidth = 1.2;
+  for (const [a, b] of edges) {
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+
+  const colors = { paper: '#185FA5', section: '#3B6D11', concept: '#8A887F', author: '#B0791A' };
+  for (const n of nodes) {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fillStyle = colors[n.type];
+    ctx.fill();
+    if (n.type === 'paper') { ctx.strokeStyle = 'rgba(24,95,165,.3)'; ctx.lineWidth = 5; ctx.stroke(); }
+    ctx.font = (n.type === 'paper' ? '600 11px' : '10px') + ' -apple-system, "Segoe UI", sans-serif';
+    ctx.fillStyle = '#3B3A36';
+    ctx.textAlign = 'center';
+    const label = n.label.length > 24 ? n.label.slice(0, 22) + '…' : n.label;
+    ctx.fillText(label, n.x, n.y + n.r + 13);
+  }
 }
 </script>
-
 </body>
 </html>
