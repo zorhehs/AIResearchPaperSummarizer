@@ -172,12 +172,15 @@
       <div class="kg-heading"><i class="ti ti-topology-star-3"></i> Paper graph</div>
       <canvas id="kg-canvas" width="420" height="500"></canvas>
       <div id="kg-legend" class="kg-legend" style="display:none;">
-        <span><span class="kg-dot" style="background:#185FA5;"></span> Paper</span>
-        <span><span class="kg-dot" style="background:#3B6D11;"></span> Section</span>
-        <span><span class="kg-dot" style="background:#B0791A;"></span> Author</span>
-        <span><span class="kg-dot" style="background:#8A887F;"></span> Concept</span>
+        <span><span class="kg-dot" style="background:#1D4ED8;"></span> Paper</span>
+        <span><span class="kg-dot" style="background:#7C3AED;"></span> Author</span>
+        <span><span class="kg-dot" style="background:#0F766E;"></span> Journal</span>
+        <span><span class="kg-dot" style="background:#D97706;"></span> Year</span>
+        <span><span class="kg-dot" style="background:#15803D;"></span> Citation</span>
+        <span><span class="kg-dot" style="background:#475569;"></span> Source</span>
       </div>
-      <div id="kg-empty" class="kg-empty">Summarize a paper to see its knowledge graph — sections and key concepts linked to the paper node.</div>
+      <div id="kg-empty" class="kg-empty">Summarize a paper to see its scholarly graph — authors, venue, year and citations linked to the paper node.</div>
+      <div id="kg-hint" class="kg-empty" style="display:none;margin-top:6px;">Only the paper and source are shown. Use a <b>DOI</b> to surface authors, journal, year and citations.</div>
     </div>
   </div>
 
@@ -600,52 +603,46 @@ function kgStop() {
   if (kgSim) { cancelAnimationFrame(kgSim.raf); kgSim = null; }
 }
 
-function kgExtractConcepts(text, max = 8) {
-  const stop = new Set('the a an and or of in on for with to from by is are was were be been this that these those we our their its it as at not which can may using used use based paper study research results result method methods approach proposed propose show shows shown suggest suggests however also such into than then when while between among each other more most less least has have had do does did section figure table eq et al ii iii'.split(' '));
-  const counts = {};
-  (text.toLowerCase().match(/[a-z][a-z-]{3,}/g) || []).forEach(w => {
-    if (stop.has(w)) return;
-    counts[w] = (counts[w] || 0) + 1;
-  });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, max)
-    .map(([w]) => w[0].toUpperCase() + w.slice(1));
-}
 function kgBuild(data) {
   const nodes = [];
   const edges = [];
   const add = (id, label, type, r) => { const n = { id, label, type, r }; nodes.push(n); return n; };
 
-  const paper = add('paper', (data.title || 'Untitled paper').slice(0, 42), 'paper', 13);
+  const paper = add('paper', (data.title || 'Untitled paper').slice(0, 40), 'paper', 15);
 
-  // Author nodes (available for DOI lookups via Crossref)
-  const authorNodes = [];
-  for (const a of (data.authors || []).slice(0, 6)) {
-    const n = add('auth:' + a, a, 'author', 7);
-    authorNodes.push(n);
+  // Contributors / authors (from DOI / Crossref metadata)
+  const authors = (Array.isArray(data.authors) ? data.authors : []).filter(Boolean);
+  authors.slice(0, 6).forEach(a => {
+    const n = add('auth:' + a, a, 'author', 9);
+    edges.push([paper, n]);
+  });
+  if (authors.length > 6) {
+    const n = add('auth:more', `+${authors.length - 6} authors`, 'author', 8);
     edges.push([paper, n]);
   }
 
-  const sections = [['summary', 'Summary'], ['methodology', 'Methodology'], ['research_gaps', 'Gaps'], ['findings', 'Findings'], ['future_work', 'Future Work']];
-  const secNodes = [];
-  for (const [key, label] of sections) {
-    const text = String(data[key] || '').trim();
-    if (!text || text === 'Data not provided by the model.') continue;
-    const n = add('sec:' + key, label, 'section', 8);
-    secNodes.push(n);
+  // Venue / journal
+  if (data.journal) {
+    const n = add('journal', data.journal.slice(0, 32), 'journal', 10);
     edges.push([paper, n]);
   }
 
-  // Citations context node
-  if (data.cited_by != null) {
-    const n = add('cite', `Cited by ${data.cited_by}`, 'concept', 7);
+  // Publication year
+  if (data.year) {
+    const n = add('year', String(data.year), 'year', 9);
     edges.push([paper, n]);
   }
 
-  for (const c of kgExtractConcepts(currentPaperText || data.summary || '')) {
-    const n = add('con:' + c, c, 'concept', 5.5);
+  // Citation count
+  const cited = data.cited_by;
+  if (cited != null && cited !== '') {
+    const n = add('cite', `Cited by ${cited}`, 'citation', 10);
     edges.push([paper, n]);
-    if (secNodes.length) edges.push([secNodes[Math.floor(Math.random() * secNodes.length)], n]);
   }
+
+  // Input source: PDF vs DOI
+  const n = add('source', `Source: ${String(data.source || 'unknown').toUpperCase()}`, 'source', 8);
+  edges.push([paper, n]);
 
   return { nodes, edges };
 }
@@ -658,12 +655,13 @@ function kgStart(data) {
   kgSim = { ...built, canvas, ctx, raf: null, drag: null };
   const { nodes, edges } = kgSim;
 
-  // initial layout: paper center, others in a ring
+  // initial layout: paper center, others in a balanced ring
   nodes[0].x = W / 2; nodes[0].y = H / 2; nodes[0].vx = 0; nodes[0].vy = 0;
+  const ringR = Math.min(145, 62 + (nodes.length - 1) * 15);
   nodes.slice(1).forEach((n, i) => {
-    const a = (2 * Math.PI * i) / (nodes.length - 1);
-    n.x = W / 2 + Math.cos(a) * 130;
-    n.y = H / 2 + Math.sin(a) * 150;
+    const a = (2 * Math.PI * i) / (nodes.length - 1) - Math.PI / 2;
+    n.x = W / 2 + Math.cos(a) * ringR;
+    n.y = H / 2 + Math.sin(a) * ringR;
     n.vx = 0; n.vy = 0;
   });
 
@@ -731,6 +729,7 @@ function kgStart(data) {
 
   document.getElementById('kg-empty').style.display = 'none';
   document.getElementById('kg-legend').style.display = 'flex';
+  document.getElementById('kg-hint').style.display = nodes.length <= 2 ? 'block' : 'none';
 }
 
 function kgRelease() { if (kgSim) kgSim.drag = null; }
@@ -749,32 +748,71 @@ function kgNodeAt(p) {
   return null;
 }
 
+function roundRectPath(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
 function kgDraw() {
-  const { ctx, nodes, edges, canvas } = kgSim;
+  const { ctx, canvas } = kgSim;
+  const { nodes, edges } = kgSim;
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#FBFBFC';
   ctx.fillRect(0, 0, W, H);
 
-  ctx.strokeStyle = 'rgba(24,95,165,.22)';
-  ctx.lineWidth = 1.2;
+  // focus rings centered on the hub
+  ctx.strokeStyle = 'rgba(24,95,165,.10)';
+  ctx.lineWidth = 1;
+  for (const r of [96, 128]) {
+    ctx.beginPath(); ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // edges
+  ctx.strokeStyle = 'rgba(29,78,216,.30)';
+  ctx.lineWidth = 1.4;
   for (const [a, b] of edges) {
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   }
 
-  const colors = { paper: '#185FA5', section: '#3B6D11', concept: '#8A887F', author: '#B0791A' };
+  const colors = {
+    paper: '#1D4ED8', author: '#7C3AED', journal: '#0F766E',
+    year: '#D97706', citation: '#15803D', source: '#475569',
+  };
+
   for (const n of nodes) {
+    if (n.type === 'paper') {
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(29,78,216,.16)'; ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
     ctx.fillStyle = colors[n.type];
     ctx.fill();
-    if (n.type === 'paper') { ctx.strokeStyle = 'rgba(24,95,165,.3)'; ctx.lineWidth = 5; ctx.stroke(); }
-    ctx.font = (n.type === 'paper' ? '600 11px' : '10px') + ' -apple-system, "Segoe UI", sans-serif';
-    ctx.fillStyle = '#3B3A36';
+    if (n.type === 'paper') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+
+    // pill label below the node for legibility
+    const label = n.label.length > 26 ? n.label.slice(0, 24) + '…' : n.label;
+    ctx.font = (n.type === 'paper' ? '700 12px' : '600 11px') + ' -apple-system, "Segoe UI", sans-serif';
+    const tw = ctx.measureText(label).width;
+    const pillW = tw + 12, pillH = n.type === 'paper' ? 18 : 16;
+    const px = n.x - pillW / 2, py = n.y + n.r + 8;
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.strokeStyle = 'rgba(0,0,0,.10)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, px, py, pillW, pillH, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#333';
     ctx.textAlign = 'center';
-    const label = n.label.length > 24 ? n.label.slice(0, 22) + '…' : n.label;
-    ctx.fillText(label, n.x, n.y + n.r + 13);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, n.x, py + pillH / 2 + 0.5);
   }
+  ctx.textBaseline = 'alphabetic';
 }
 </script>
 </body>
