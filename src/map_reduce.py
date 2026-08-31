@@ -1,12 +1,4 @@
-import os
 import time
-from dotenv import load_dotenv
-from groq import Groq
-
-load_dotenv()
-
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "openai/gpt-oss-120b"
 
 CHUNK_SIZE = 20000
 OVERLAP = 100
@@ -25,20 +17,20 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) 
 
 
 def _call_groq_with_retry(prompt: str) -> str:
+    """Call the shared Groq helper (with model fallback) wrapped in retry/backoff."""
+    from summarize import _ask_groq
+
     delay = RETRY_DELAY
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.choices[0].message.content
+            return _ask_groq([{"role": "user", "content": prompt}])
         except Exception as e:
             if attempt == MAX_RETRIES:
                 raise
             print(f"    (error: {e}, retrying in {delay}s... attempt {attempt}/{MAX_RETRIES})")
             time.sleep(delay)
             delay *= 2
+
 
 
 def summarize_chunk(chunk: str, chunk_num: int, total_chunks: int) -> str:

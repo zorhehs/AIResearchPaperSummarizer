@@ -2,239 +2,828 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Research Paper Summarizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Crect width='8' height='8' fill='%234787c3'/%3E%3Crect x='2' y='1' width='4' height='6' fill='white'/%3E%3Crect x='3' y='2' width='2' height='1' fill='%234787c3'/%3E%3Crect x='3' y='4' width='2' height='1' fill='%234787c3'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
 <style>
+  /* ── reset & base ─────────────────────────── */
   * { box-sizing: border-box; }
-  :root {
-    --accent: #185FA5; --accent-dark: #104A83; --accent-soft: #F0F6FC;
-    --bg: #F6F7F9; --card: #ffffff; --border: #E7E8EC;
-    --text: #1a1a1a; --muted: #5F5E5A; --faint: #9B9A93;
-    --radius: 14px;
-    --shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
-    --shadow-lg: 0 8px 24px rgba(16,24,40,.10);
-    --serif: Georgia, "Times New Roman", serif;
+  body {
+    font-family: 'Inter', -apple-system, "Segoe UI", sans-serif;
+    margin: 0; color: #1c1917;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  body { font-family: -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem 3rem; }
 
-  .layout { display: flex; gap: 28px; max-width: 1240px; margin: 0 auto; }
-  .sidebar { width: 250px; flex-shrink: 0; position: sticky; top: 2rem; align-self: flex-start; }
-  .sidebar-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2rem; }
-  .sidebar-heading { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
-  .sidebar-text { font-size: 0.82rem; color: var(--muted); line-height: 1.65; }
-  .sidebar-recent { font-size: 0.78rem; padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 6px; color: #3B3A36; border: 1px solid transparent; transition: all .15s; cursor: default; display: flex; gap: 6px; align-items: baseline; }
-  .sidebar-recent:hover { border-color: var(--accent); color: var(--accent); }
-  .sidebar-footer { font-size: 0.74rem; color: var(--faint); margin: 4px 0 0; }
-  hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  /* ── sky / hero (unchanged structure) ──────── */
+  .sky {
+    position: relative; min-height: 100vh; overflow: hidden;
+    background: linear-gradient(180deg, #3f7fbd 0%, #4f92cb 45%, #5fa0d6 100%);
+    padding-bottom: 0;
+  }
+  .deco { position: absolute; pointer-events: none; }
+  .deco.tree-tr   { top: -36px; right: -48px; width: 280px; }
+  .deco.tree-left { top: 430px; left: -90px;  width: 320px; }
+  .deco.cloud-1 { top: 29%; left: 2%;  width: 200px; opacity: .65; }
+  .deco.cloud-2 { top: 32%; left: 55%; width: 240px; opacity: .65; }
+  .deco.cloud-3 { top: 8%;  left: 12%; width: 130px; opacity: .8; }
+  @media (max-width: 860px) {
+    .deco.tree-left { display: none; }
+    .deco.tree-tr { width: 170px; }
+  }
+  .sky-night {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, #0d1f36 0%, #142e4d 45%, #1b3c62 100%);
+    opacity: 0; transition: opacity .9s ease;
+  }
+  body.dark .sky-night { opacity: 1; }
+  .deco.moon { top: 40px; left: 6%; width: 92px; opacity: 0; transform: scale(.55) rotate(-24deg); transition: opacity .8s ease, transform .8s ease, filter .9s ease; }
+  body.dark .deco.moon { opacity: 1; transform: none; }
+  body.dark .deco:not(.moon) { filter: brightness(.82); }
+  .deco.tree-tr, .deco.tree-left { transform-origin: 50% 100%; animation: sway 7s ease-in-out infinite; }
+  .deco.tree-left { animation-duration: 9.5s; animation-delay: -3s; }
+  @keyframes sway { 0%,100% { transform: rotate(.6deg); } 50% { transform: rotate(-.8deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .deco.cloud-1,.deco.cloud-2,.deco.cloud-3,.deco.tree-tr,.deco.tree-left,
+    .hero h1,.app-card,.result-card,button.scroll-cue { animation: none !important; }
+  }
+  .hero { position: relative; text-align: center; padding: 76px 24px 0; max-width: 1000px; margin: 0 auto; }
+  .hero h1 {
+    color: #fff; font-size: clamp(2.4rem, 5.4vw, 4.1rem); font-weight: 700;
+    letter-spacing: -0.035em; line-height: 1.08; margin: 0 0 24px;
+  }
+  .hero h1 .dim { color: rgba(255,255,255,.5); display: block; }
+  .marquee {
+    position: relative; width: 100vw; margin-left: calc(50% - 50vw); margin-bottom: 54px;
+    overflow: hidden; padding: 9px 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
+    border-top: 1px solid rgba(255,255,255,.2); border-bottom: 1px solid rgba(255,255,255,.2);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .marquee-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  .marquee-item {
+    white-space: nowrap; color: rgba(255,255,255,.72);
+    font-family: "Space Grotesk", sans-serif; font-size: clamp(.68rem,.9vw,.8rem);
+    font-weight: 500; text-transform: uppercase; letter-spacing: .08em; padding-right: 56px;
+  }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track { animation: none; width: 100%; justify-content: center; }
+    .marquee-item { white-space: normal; padding: 0 28px; text-align: center; }
+    .marquee-item[aria-hidden="true"] { display: none; }
+  }
+  button.scroll-cue {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+    margin: 2px auto 36px; padding: 4px 16px;
+    background: none; color: rgba(255,255,255,.85); font-size: 30px;
+    border: none; cursor: pointer;
+    animation: bob 1.8s ease-in-out infinite;
+  }
+  button.scroll-cue:hover:not(:disabled) { background: rgba(255,255,255,.12); color: #fff; }
+  .scroll-cue .cue-label {
+    font-size: 9px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase;
+    color: rgba(255,255,255,.55); font-family: "Space Grotesk", sans-serif;
+  }
+  button.scroll-cue:hover .cue-label { color: rgba(255,255,255,.8); }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(9px); } }
+  @media (max-width: 860px) { .hero { padding-top: 52px; } }
 
-  /* ===== Knowledge graph ===== */
-  .kg-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-top: 14px; }
-  .kg-heading { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .kg-heading i { color: var(--accent); }
-  #kg-canvas { width: 100%; height: 260px; display: block; border-radius: 10px; background: #FBFBFC; cursor: grab; }
-  #kg-canvas:active { cursor: grabbing; }
-  .kg-empty { font-size: .78rem; color: var(--faint); line-height: 1.6; padding: 8px 2px; }
-  .kg-legend { display: flex; gap: 12px; margin-top: 8px; font-size: .7rem; color: var(--muted); }
-  .kg-legend span { display: inline-flex; align-items: center; gap: 4px; }
-  .kg-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  /* ── stage & card ───────────────────────── */
+  .stage { position: relative; max-width: 1120px; margin: 48px auto 0; padding: 0 24px; }
 
-  .main { flex: 1; min-width: 0; }
-  h1 { font-size: 1.9rem; margin: 0 0 4px; line-height: 1.2; display: flex; align-items: center; }
-  h1 i { color: var(--accent); margin-right: 10px; font-size: 1.6rem; position: relative; top: 1px; }
-  .subtitle { color: var(--muted); font-size: 0.95rem; margin: 0 0 20px; padding-left: 2px; }
-  /* ===== Input panel ===== */
-  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem 1.6rem; margin-bottom: 24px; }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
-  .tab { padding: 9px 18px; font-size: 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; user-select: none; }
-  .tab:hover { color: var(--accent); }
-  .tab.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
+  .app-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 4px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06), 0 24px 64px rgba(0,0,0,.06);
+    overflow: hidden;
+    animation: cardRise .55s cubic-bezier(.16,1,.3,1) both;
+    animation-delay: .25s;
+  }
+  @keyframes cardRise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  /* ── card header ────────────────────── */
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px 13px;
+    background: #fafafa;
+    border-bottom: 1px solid #e9eaeb;
+  }
+  .card-head-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600; color: #4b5563; letter-spacing: -0.005em;
+  }
+  .card-head-title i { font-size: 15px; color: #b0b8c1; }
+
+  /* ── usage chip ───────────────────── */
+  .usage-chip {
+    font-size: 11px; font-weight: 500; color: #6b7280;
+    background: #f3f4f6; border: 1px solid #e5e7eb;
+    border-radius: 6px; padding: 4px 10px; display: none;
+  }
+  .usage-chip.warn { background: #fef3ea; color: #b45309; border-color: #fcd9a8; }
+
+  /* ── dashboard grid ───────────────── */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    min-height: 540px;
+  }
+  .input-col {
+    background: #f5f5f5;
+    background-image: radial-gradient(circle, #d1d5db 1px, transparent 1px);
+    background-size: 20px 20px;
+    border-right: 1px solid #e9eaeb;
+    display: flex; flex-direction: column;
+  }
+  .input-panel { padding: 22px 20px 24px; }
+  .results-col { background: #fff; min-width: 0; }
+  .results-col #results-area { padding: 26px 28px 32px; }
+
+  /* ── segmented mode switch ──────────── */
+  .mode-switch {
+    display: flex; background: #efefef; border-radius: 9px; padding: 3px; gap: 2px; margin-bottom: 18px;
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 7px 10px; font-size: 12px; border-radius: 6px;
+    cursor: pointer; color: #9ca3af; font-weight: 500; user-select: none;
+    transition: background .14s, color .14s, box-shadow .14s;
+  }
+  .tab.active {
+    background: #fff; color: #1c1917; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.06);
+  }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  .dropzone { border: 1.5px dashed #C5C3BA; border-radius: 12px; padding: 24px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; transition: all .15s; background: #FBFBFC; }
-  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
-  .dropzone.dragover { border-style: solid; }
-  .dropzone-left { display: flex; align-items: center; gap: 12px; }
-  .dropzone > .dropzone-left > i { font-size: 26px; color: var(--faint); }
-  .dropzone:hover .dropzone-left > i, .dropzone.dragover .dropzone-left > i { color: var(--accent); }
-  .dropzone p { margin: 0; font-size: 14px; font-weight: 500; }
-  .dropzone .hint { font-size: 12px; color: var(--faint); font-weight: 400; }
-
-  button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 22px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s, transform .05s, box-shadow .15s; }
-  button:hover:not(:disabled) { background: var(--accent-dark); box-shadow: 0 2px 8px rgba(24,95,165,.3); }
-  button:active:not(:disabled) { transform: scale(.98); }
-  button.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
-  button.secondary:hover:not(:disabled) { background: var(--bg); box-shadow: none; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  input[type="text"] { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; transition: border .15s, box-shadow .15s; }
-  input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,.12); }
-  .filename { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
-
-  /* ===== Thinking loader ===== */
-  .thinking { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 34px; margin: 24px 0; }
-  .thinking-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-  .thinking-orb { width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 32% 30%, #7FB4E8, var(--accent) 60%, var(--accent-dark)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 22px; flex-shrink: 0; animation: orbPulse 2.2s ease-in-out infinite; }
-  @keyframes orbPulse { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(24,95,165,.35); } 50% { transform: scale(1.08); box-shadow: 0 0 0 14px rgba(24,95,165,0); } }
-  .thinking-title { font-size: 1.1rem; font-weight: 600; }
-  .thinking-title .dots::after { content: ''; animation: dots 1.4s steps(1, end) infinite; }
-  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
-  .thinking-sub { font-size: .8rem; color: var(--faint); margin-top: 2px; }
-  .thinking-steps { border-left: 2px solid var(--border); margin-left: 10px; padding-left: 0; }
-  .thinking-step { display: flex; align-items: flex-start; gap: 12px; padding: 7px 0 7px 18px; position: relative; font-size: .88rem; color: var(--faint); opacity: 0; transform: translateY(4px); transition: opacity .35s, transform .35s, color .35s; }
-  .thinking-step.visible { opacity: 1; transform: none; }
-  .thinking-step::before { content: ''; position: absolute; left: -6px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: background .3s; }
-  .thinking-step.active { color: var(--text); }
-  .thinking-step.active::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,.18); animation: dotPulse 1.4s ease-in-out infinite; }
-  .thinking-step.done { color: var(--muted); }
-  .thinking-step.done::before { background: #6FBF4E; }
-  @keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 3px rgba(24,95,165,.18); } 50% { box-shadow: 0 0 0 6px rgba(24,95,165,.06); } }
-  .thinking-step .status-icon { width: 18px; flex-shrink: 0; text-align: center; }
-  .thinking-step .status-icon .ti-loader-2 { display: inline-block; animation: spin 1.2s linear infinite; color: var(--accent); }
-  @keyframes spin { 100% { transform: rotate(360deg); } }
-  .thinking-step .cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); margin-left: 2px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
-  .thinking-bar { height: 5px; border-radius: 3px; background: var(--bg); overflow: hidden; margin: 22px 0 0; position: relative; }
-  .thinking-bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: shimmer 1.4s linear infinite; }
-  @keyframes shimmer { 0% { left: -40%; } 100% { left: 100%; } }
-  /* ===== Results (research paper style) ===== */
-  .paper-header { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.6rem 1.9rem; margin-bottom: 14px; }
-  .paper-title { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; margin: 0 0 10px; line-height: 1.35; }
-  .paper-authors { font-family: var(--serif); font-style: italic; font-size: .9rem; color: var(--muted); margin: -4px 0 12px; }
-  .tag { display: inline-flex; align-items: center; gap: 5px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); padding: 3px 11px; border-radius: 20px; font-size: 0.75rem; margin-right: 6px; }
-  .paper-abstract { font-family: var(--serif); font-size: 0.9rem; color: #3B3A36; line-height: 1.75; border-left: 2px solid var(--accent); padding: 4px 0 4px 16px; margin-top: 16px; }
-  .paper-abstract .abs-label { font-weight: 700; color: var(--text); }
-
-  .stats { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 1.9rem; margin-bottom: 14px; font-size: .85rem; color: var(--muted); flex-wrap: wrap; }
-  .stats .stat { display: inline-flex; align-items: baseline; gap: 5px; }
-  .stats .stat b { color: var(--text); font-weight: 600; font-size: .95rem; }
-  .stats .stat.saved b { color: #3B6D11; }
-  .stats .sep { color: var(--border); }
-
-  .paper-body { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: .3rem 1.9rem .6rem; margin-bottom: 14px; }
-  .result-card { padding: 20px 0 18px; border-bottom: 1px solid var(--border); }
-  .result-card:last-child { border-bottom: none; }
-  .result-card-header { font-family: var(--serif); font-size: 1.05rem; font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .result-card-header .section-num { color: var(--accent); font-weight: 400; margin-right: 8px; }
-  .result-card-header .copy-btn { cursor: pointer; color: #C9C8C1; font-size: 14px; transition: color .15s; }
-  .result-card-header .copy-btn:hover { color: var(--accent); }
-  .result-card-body { font-family: var(--serif); font-size: 0.93rem; color: #2B2A27; line-height: 1.75; }
-  .result-card-body p { margin: 0 0 10px; }
-  .result-card-body ul, .result-card-body ol { margin: 2px 0 8px; padding-left: 20px; }
-  .result-card-body li { margin-bottom: 6px; padding-left: 2px; }
-  .result-card-body li::marker { color: var(--accent); }
-
-  .actions-row { display: flex; gap: 8px; margin-bottom: 18px; }
-  .actions-row button { padding: 8px 16px; font-size: 13px; }
-  .error-box { background: #FCEBEB; color: #791F1F; padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 14px; border: 1px solid #F5C8C8; }
-  .error-box i { margin-right: 6px; }
-  .empty-state { text-align: center; padding: 60px 20px; color: var(--faint); }
-  .empty-state i { font-size: 44px; margin-bottom: 12px; display: block; }
-
-  /* ===== Chat ===== */
-  .chat-section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem 1.6rem; }
-  .chat-heading { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-  .chat-heading i { color: var(--accent); }
-  .chat-bubble { border-radius: 14px; padding: 11px 15px; max-width: 78%; font-size: 13.5px; margin-bottom: 10px; line-height: 1.6; }
-  .chat-bubble.user { background: var(--bg); border: 1px solid var(--border); border-bottom-right-radius: 4px; margin-left: auto; }
-  .chat-bubble.assistant { background: var(--accent-soft); color: var(--accent-dark); border-bottom-left-radius: 4px; }
-  .chat-bubble.typing span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px; opacity: .4; animation: blink 1.2s infinite; }
-  .chat-bubble.typing span:nth-child(2) { animation-delay: .2s; }
-  .chat-bubble.typing span:nth-child(3) { animation-delay: .4s; }
-  @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
-  .chat-input-row { display: flex; gap: 8px; margin-top: 14px; }
-  .chat-input-row input { margin-bottom: 0; flex: 1; }
-
-  @media (max-width: 900px) {
-    body { padding: 0 1rem; }
-    .layout { flex-direction: column; margin-top: 1.2rem; }
-    .sidebar { width: 100%; position: static; }
-    .stats { grid-template-columns: 1fr; }
-    .paper-header, .paper-body { padding-left: 1.2rem; padding-right: 1.2rem; }
+  /* ── drop zone ────────────────────── */
+  .dropzone {
+    background: rgba(255,255,255,.72);
+    border: 1.5px dashed #d1d5db;
+    border-radius: 11px; padding: 30px 14px 26px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 5px; margin-bottom: 14px; cursor: pointer; text-align: center;
+    transition: border-color .15s, background .15s;
   }
+  .dropzone:hover, .dropzone.dragover { border-color: #5a8fc4; background: rgba(255,255,255,.9); }
+  .dropzone i { font-size: 22px; color: #b0b8c1; transition: color .15s; margin-bottom: 4px; }
+  .dropzone:hover i, .dropzone.dragover i { color: #4a7fb5; }
+  .dropzone p { margin: 0; font-size: 13px; color: #374151; font-weight: 500; }
+  .dropzone .hint { font-size: 11px; color: #9ca3af; }
+  .dropzone .browse-link {
+    font-size: 11.5px; color: #4a7fb5; font-weight: 500;
+    text-decoration: underline; text-underline-offset: 2px; text-decoration-color: transparent;
+    transition: text-decoration-color .14s;
+  }
+  .dropzone:hover .browse-link { text-decoration-color: #4a7fb5; }
 
+  /* ── file card (after selection) ───────── */
+  .file-card {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .file-card-icon {
+    width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+    background: #3b6ea5; display: flex; align-items: center; justify-content: center;
+  }
+  .file-card-icon i { font-size: 15px; color: #fff; }
+  .file-card-info { flex: 1; min-width: 0; }
+  .file-card-name { font-size: 12.5px; font-weight: 600; color: #1c1917; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-card-size { font-size: 10.5px; color: #9ca3af; margin-top: 1px; }
+  .file-card-remove {
+    background: none; border: none; color: #b0b8c1; font-size: 15px;
+    cursor: pointer; padding: 4px; border-radius: 6px;
+    display: flex; align-items: center; transition: color .13s, background .13s;
+  }
+  .file-card-remove:hover { color: #b04040; background: #faeaea; }
+
+  /* ── buttons & inputs ──────────────── */
+  button {
+    background: #1c1917; color: #fff; border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .13s, box-shadow .13s;
+    letter-spacing: -0.01em; font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: #292524; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+  button.secondary {
+    background: #fff; color: #374151;
+    border: 1px solid #e5e7eb; box-shadow: none;
+  }
+  button.secondary:hover:not(:disabled) { background: #f5f5f5; border-color: #d1d5db; box-shadow: none; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  input[type="text"] {
+    width: 100%; padding: 10px 13px; border: 1px solid #e5e7eb; border-radius: 9px;
+    background: rgba(255,255,255,.8); font-size: 13px; margin-bottom: 12px;
+    font-family: inherit; color: #1c1917;
+    transition: border-color .13s, box-shadow .13s; box-sizing: border-box;
+  }
+  input[type="text"]::placeholder { color: #b5b0a8; }
+  input[type="text"]:focus { outline: none; border-color: #7aadd8; box-shadow: 0 0 0 3px rgba(74,127,181,.14); background: #fff; }
+  .filename { display: none; }
+
+  /* ── results area ──────────────────── */
+  .paper-title { font-size: 1.18rem; font-weight: 700; color: #1c1917; margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.3; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 18px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; color: #6b7280; background: #f3f4f6;
+    border: 1px solid #e5e7eb; padding: 3px 9px; border-radius: 6px; font-weight: 500;
+  }
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+  .pill.good { background: #e6f4de; color: #3d7a2e; }
+  .pill.bad  { background: #fdeee8; color: #b04040; }
+  .pill.neutral { background: #f3f4f6; color: #6b7280; }
+
+  /* ── stats block (premium style matching reference) ── */
+  .stats {
+    background: #f5f5f5; border: 1px solid #e5e7eb; border-radius: 14px;
+    padding: 20px 22px 4px; margin: 0 0 20px;
+  }
+  .stats-label { font-size: 11.5px; color: #9ca3af; font-weight: 500; margin: 0 0 6px; letter-spacing: 0; }
+  .stats-big { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .stats-big .num { font-size: 52px; font-weight: 700; letter-spacing: -0.045em; color: #1c1917; line-height: 1; }
+  .statbar {
+    height: 26px; background: #e5e7eb; border-radius: 7px;
+    overflow: hidden; margin: 0 0 0;
+  }
+  .statbar .fill {
+    height: 100%; border-radius: 7px; background: #7cc86a;
+    transition: width .75s cubic-bezier(.16,1,.3,1);
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-top: 1px solid #e9eaeb; font-size: 13px; color: #6b7280;
+  }
+  .stat-row .val { font-weight: 600; color: #1c1917; display: inline-flex; align-items: center; gap: 8px; }
+
+  /* ── section cards ────────────────── */
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .result-card {
+    background: #fff; border: 1px solid #e9eaeb; border-radius: 12px;
+    padding: 16px 18px; transition: border-color .14s, box-shadow .14s;
+  }
+  .result-card:hover { border-color: #d1d5db; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+  .results .result-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .result-card-header {
+    font-size: 10.5px; font-weight: 600; margin: 0 0 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #9ca3af; text-transform: uppercase; letter-spacing: .06em;
+  }
+  .result-card-header .copy-btn { cursor: pointer; color: #d1d5db; font-size: 13px; transition: color .13s; text-transform: none; letter-spacing: 0; }
+  .result-card-header .copy-btn:hover { color: #3b6ea5; }
+  .result-card-body { font-size: 13px; color: #4b5563; line-height: 1.72; }
+  .result-card-body ul, .result-card-body ol { margin: 4px 0; padding-left: 18px; }
+  .result-card-body li { margin-bottom: 7px; }
+  .result-card-body li:last-child { margin-bottom: 0; }
+  .sec-paragraph { margin: 0 0 8px; }
+  .sec-paragraph:last-child { margin-bottom: 0; }
+
+  .action-row { display: flex; gap: 7px; margin-top: 18px; flex-wrap: wrap; }
+
+  /* ── chat ────────────────────────── */
+  .chat-section { margin-top: 24px; border-top: 1px solid #e9eaeb; padding-top: 20px; }
+  .chat-heading { font-size: 11px; font-weight: 600; color: #9ca3af; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .07em; }
+  .chat-bubble { border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 8px; line-height: 1.58; }
+  .chat-bubble.user    { background: #eef3fb; color: #1e3858; max-width: 72%; }
+  .chat-bubble.assistant { border: 1px solid #e9eaeb; background: #fff; max-width: 84%; margin-left: auto; color: #374151; }
+  .chat-input-row {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+    padding: 10px 14px; margin-top: 12px;
+    transition: border-color .13s, box-shadow .13s;
+  }
+  .chat-input-row:focus-within { border-color: #7aadd8; box-shadow: 0 0 0 3px rgba(74,127,181,.12); }
+  .chat-input-row input { border: none; padding: 0; margin: 0; font-size: 13px; flex: 1; font-family: inherit; background: transparent; color: #1c1917; }
+  .chat-input-row input::placeholder { color: #b5b0a8; }
+  .chat-input-row input:focus { outline: none; }
+  .chat-input-row i { color: #b0b8c1; font-size: 15px; cursor: pointer; transition: color .13s; }
+  .chat-input-row i:hover { color: #3b6ea5; }
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .chip {
+    font-size: 11.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px;
+    background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; cursor: pointer;
+    transition: background .13s, border-color .13s;
+  }
+  .chip:hover { background: #e9eaeb; border-color: #d1d5db; }
+  .chat-typing { display: inline-flex; gap: 4px; padding: 10px 13px; }
+  .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: #d1d5db; animation: blink 1.2s infinite; }
+  .chat-typing span:nth-child(2) { animation-delay: .2s; }
+  .chat-typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+  /* ── loading & states ──────────────── */
+  .loading { padding: 28px 0 8px; color: #9ca3af; font-size: 13px; }
+  .loading .dots::after { content: ''; animation: dots 1.4s steps(1, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+  .loading-bar { height: 3px; border-radius: 3px; background: #e5e7eb; overflow: hidden; margin-top: 10px; position: relative; max-width: 260px; }
+  .loading-bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 3px; background: #7aadd8; animation: slide 1.3s ease-in-out infinite; }
+  @keyframes slide { 0% { left: -40%; } 100% { left: 100%; } }
+  .load-sections { margin-top: 16px; max-width: 260px; }
+  .load-section { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #b0b8c1; padding: 5px 0; transition: color .3s; }
+  .load-section i { font-size: 13px; animation: spin 1.2s linear infinite; }
+  .load-section.done { color: #4d9441; }
+  .load-section.done i { animation: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-box { background: #fdeee8; color: #b04040; padding: 12px 16px; border-radius: 10px; margin: 12px 0; font-size: 13px; border: 1px solid #f5c8b8; }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 420px; gap: 10px; text-align: center; color: #b0b8c1; font-size: 13px; padding: 40px 24px;
+  }
+  .empty-icon { font-size: 36px; color: #d4d7dc; margin-bottom: 4px; }
+
+  /* ── card footer ──────────────────── */
+  .card-footer {
+    border-top: 1px solid #e9eaeb; padding: 12px 24px 14px;
+    background: #fafafa;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .card-footer-brand { display: flex; align-items: center; gap: 5px; color: #b0b8c1; font-size: 11px; }
+  .card-footer-brand i { font-size: 12px; }
+  .recent-wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .recent-label { font-size: 11px; color: #b8bec6; font-weight: 500; white-space: nowrap; }
+  .recent-item {
+    font-size: 11px; color: #6b7280; background: #f3f4f6;
+    border-radius: 6px; padding: 3px 9px;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: background .13s, color .13s;
+  }
+  .recent-item:hover { background: #e4edf8; color: #3b6ea5; }
+  .recent-item i { font-size: 10px; color: #b8bec6; }
+
+  /* ── animations ────────────────────── */
+  .result-card { animation: cardRise .42s cubic-bezier(.16,1,.3,1) backwards; }
+  .result-card:nth-child(2) { animation-delay: .05s; }
+  .result-card:nth-child(3) { animation-delay: .1s; }
+  .result-card:nth-child(4) { animation-delay: .15s; }
+  .result-card:nth-child(5) { animation-delay: .2s; }
+  .deco.cloud-1 { animation: drift 95s linear infinite; animation-delay: -20s; }
+  .deco.cloud-2 { animation: drift 130s linear infinite; animation-delay: -70s; }
+  .deco.cloud-3 { animation: drift 75s linear infinite; animation-delay: -50s; }
+  @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(115vw); } }
+
+  /* ── responsive ──────────────────── */
+  @media (max-width: 960px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .input-col { border-right: none; border-bottom: 1px solid #e9eaeb; }
+    .results-col #results-area { padding: 22px 20px 28px; }
+    .empty-state { min-height: 200px; }
+  }
+  @media (max-width: 860px) {
+    .stage { padding: 0 14px; margin-top: 38px; }
+    .app-card { border-radius: 14px; }
+    .card-head { padding: 12px 16px 11px; }
+    .input-panel { padding: 18px 16px 20px; }
+    .card-footer { padding: 11px 16px 13px; }
+    .results { grid-template-columns: 1fr; }
+  }
+  /* ---------- animations ---------- */
+  .hero h1, .app-card { animation: rise .7s ease-out backwards; }
+  .features { animation-delay: .2s; }
+  .app-card { animation-delay: .3s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  .deco.cloud-1 { animation: drift 95s linear infinite; animation-delay: -20s; }
+  .deco.cloud-2 { animation: drift 130s linear infinite; animation-delay: -70s; }
+  .deco.cloud-3 { animation: drift 75s linear infinite; animation-delay: -50s; }
+  @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(115vw); } }
+  .result-card { animation: rise .45s ease-out backwards; }
+  .result-card:nth-child(2) { animation-delay: .05s; }
+  .result-card:nth-child(3) { animation-delay: .1s; }
+  .result-card:nth-child(4) { animation-delay: .15s; }
+  .result-card:nth-child(5) { animation-delay: .2s; }
+
+  /* ---------- section list rendering ---------- */
+  .result-card-body ul, .result-card-body ol { margin: 2px 0; padding-left: 20px; }
+  .result-card-body li { margin-bottom: 7px; }
+  .result-card-body li:last-child { margin-bottom: 0; }
+  .sec-paragraph { margin: 0 0 8px; }
+  .sec-paragraph:last-child { margin-bottom: 0; }
+
+  /* ---------- loading checklist ---------- */
+  .load-sections { margin-top: 16px; max-width: 340px; }
+  .load-section { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #9aa2ad; padding: 5px 0; transition: color .3s; }
+  .load-section i { font-size: 14px; animation: spin 1.2s linear infinite; }
+  .load-section.done { color: #3a7d22; }
+  .load-section.done i { animation: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── theme toggle & stars ────────────── */
+  button.theme-toggle {
+    position: absolute; top: 18px; right: 18px; z-index: 10;
+    background: rgba(255,255,255,.16); color: #fff; padding: 10px 12px; font-size: 15px;
+    border-radius: 10px; border: none; cursor: pointer; display: inline-flex; align-items: center;
+  }
+  button.theme-toggle:hover:not(:disabled) { background: rgba(255,255,255,.26); }
+  .stars { display: none; }
+
+  /* ── dark mode ────────────────────── */
+  body.dark .hero h1 .dim { color: rgba(255,255,255,.4); }
+  body.dark .deco.cloud-1, body.dark .deco.cloud-2, body.dark .deco.cloud-3 { fill: #2e4055; }
+  body.dark .stars {
+    display: block; position: absolute; top: 0; left: 0; right: 0;
+    height: 460px; overflow: hidden; pointer-events: none;
+  }
+  body.dark .stars::before {
+    animation: twinkle 3.2s ease-in-out infinite alternate;
+    content: ''; position: absolute; width: 3px; height: 3px; border-radius: 1px; background: transparent;
+    box-shadow: 5vw 8vh #cfe0f2,12vw 20vh #9db8d6,22vw 6vh #cfe0f2,30vw 16vh #8fa9c9,
+      40vw 10vh #cfe0f2,52vw 5vh #9db8d6,60vw 18vh #cfe0f2,70vw 9vh #8fa9c9,
+      80vw 14vh #cfe0f2,90vw 7vh #9db8d6,8vw 34vh #8fa9c9,45vw 28vh #9db8d6,88vw 30vh #cfe0f2;
+  }
+  @keyframes twinkle { from { opacity: .6; } to { opacity: 1; } }
+
+  body.dark .app-card { background: #1c1917; border-color: #2c2822; box-shadow: 0 8px 24px rgba(0,0,0,.4), 0 24px 64px rgba(0,0,0,.4); }
+  body.dark .card-head { background: #161412; border-color: #2c2822; }
+  body.dark .card-head-title { color: #4b5563; }
+  body.dark .card-head-title i { color: #3d3830; }
+  body.dark .usage-chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
+  body.dark .usage-chip.warn { background: #3d2a1e; color: #d48a40; border-color: #5a3a20; }
+  body.dark .input-col { background: #161412; background-image: radial-gradient(circle, #28231e 1px, transparent 1px); background-size: 20px 20px; border-color: #2c2822; }
+  body.dark .results-col { background: #1c1917; }
+  body.dark .mode-switch { background: #28231e; }
+  body.dark .tab { color: #4b5563; }
+  body.dark .tab.active { background: #332d28; color: #e7e5e4; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  body.dark .dropzone { background: rgba(255,255,255,.03); border-color: #3d3830; }
+  body.dark .dropzone:hover, body.dark .dropzone.dragover { background: rgba(255,255,255,.06); border-color: #5a7fa8; }
+  body.dark .dropzone p { color: #9ca3af; }
+  body.dark .dropzone .hint { color: #4b5563; }
+  body.dark .dropzone .browse-link { color: #6b9fd4; }
+  body.dark .file-card { background: #28231e; border-color: #3d3830; box-shadow: none; }
+  body.dark .file-card-name { color: #e7e5e4; }
+  body.dark .file-card-size { color: #4b5563; }
+  body.dark .file-card-remove { color: #3d3830; }
+  body.dark .file-card-remove:hover { color: #e07070; background: #3a1818; }
+  body.dark button { background: #e7e5e4; color: #1c1917; }
+  body.dark button:hover:not(:disabled) { background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+  body.dark button.secondary { background: #28231e; color: #9ca3af; border-color: #3d3830; box-shadow: none; }
+  body.dark button.secondary:hover:not(:disabled) { background: #332d28; box-shadow: none; }
+  body.dark button.theme-toggle { background: rgba(0,0,0,.28); color: #fff; }
+  body.dark button.theme-toggle:hover:not(:disabled) { background: rgba(0,0,0,.42); }
+  body.dark button.scroll-cue { background: none; color: rgba(255,255,255,.85); box-shadow: none; }
+  body.dark button.scroll-cue:hover:not(:disabled) { background: rgba(255,255,255,.12); }
+  body.dark input[type="text"] { background: #1e1a17; border-color: #3d3830; color: #e7e5e4; }
+  body.dark input[type="text"]::placeholder { color: #3d3830; }
+  body.dark .paper-title { color: #e7e5e4; }
+  body.dark .tag { background: #28231e; border-color: #3d3830; color: #6b7280; }
+  body.dark .stats { background: #161412; border-color: #2c2822; }
+  body.dark .stats-label { color: #4b5563; }
+  body.dark .stats-big .num { color: #e7e5e4; }
+  body.dark .statbar { background: #28231e; }
+  body.dark .statbar .fill { background: #5a9448; }
+  body.dark .stat-row { border-color: #2c2822; color: #6b7280; }
+  body.dark .stat-row .val { color: #c8c4be; }
+  body.dark .result-card { background: #1e1a17; border-color: #2c2822; }
+  body.dark .result-card:hover { border-color: #3d3830; box-shadow: none; }
+  body.dark .result-card-header { color: #4b5563; }
+  body.dark .result-card-header .copy-btn { color: #3d3830; }
+  body.dark .result-card-header .copy-btn:hover { color: #6b9fd4; }
+  body.dark .result-card-body { color: #6b7280; }
+  body.dark .chat-section { border-color: #2c2822; }
+  body.dark .chat-heading { color: #3d3830; }
+  body.dark .chat-bubble.user { background: #1e3048; color: #a8c8e8; }
+  body.dark .chat-bubble.assistant { background: #1e1a17; border-color: #2c2822; color: #9ca3af; }
+  body.dark .chat-input-row { background: #1e1a17; border-color: #3d3830; }
+  body.dark .chat-input-row input { color: #e7e5e4; }
+  body.dark .chat-input-row input::placeholder { color: #3d3830; }
+  body.dark .chat-input-row i { color: #3d3830; }
+  body.dark .chat-input-row i:hover { color: #6b9fd4; }
+  body.dark .chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
+  body.dark .chip:hover { background: #332d28; }
+  body.dark .chat-typing span { background: #3d3830; }
+  body.dark .loading { color: #4b5563; }
+  body.dark .loading-bar { background: #28231e; }
+  body.dark .loading-bar::after { background: #4a7fb5; }
+  body.dark .load-section { color: #3d3830; }
+  body.dark .load-section.done { color: #5a9448; }
+  body.dark .error-box { background: #3a1818; color: #e07070; border-color: #5a2a2a; }
+  body.dark .empty-state { color: #3d3830; }
+  body.dark .empty-icon { color: #2c2822; }
+  body.dark .card-footer { background: #161412; border-color: #2c2822; }
+  body.dark .card-footer-brand { color: #3d3830; }
+  body.dark .recent-label { color: #3d3830; }
+  body.dark .recent-item { background: #28231e; color: #4b5563; }
+  body.dark .recent-item:hover { background: #1e3048; color: #6b9fd4; }
+  body.dark .pill.good { background: #1a3018; color: #5a9448; }
+  body.dark .pill.bad  { background: #3a1818; color: #e07070; }
+  body.dark .pill.neutral { background: #28231e; color: #78716c; }
+
+  /* ── crayon scene footer ───────────────── */
+  .scene-footer {
+    position: relative;
+    width: 100%;
+    margin-top: 48px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  .scene-svg {
+    display: block;
+    width: 100%;
+    height: 150px;
+  }
+  .scene-credit {
+    position: absolute;
+    bottom: 10px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: rgba(255,255,255,.78);
+    letter-spacing: -0.01em;
+    text-shadow: 0 1px 5px rgba(0,0,0,.35);
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .scene-credit strong { font-weight: 600; color: #fff; }
+  .scene-credit a {
+    color: #fff; font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: rgba(255,255,255,.42);
+    transition: text-decoration-color .15s;
+  }
+  .scene-credit a:hover { text-decoration-color: rgba(255,255,255,.9); }
+  @media (max-width: 860px) {
+    .scene-footer { margin-top: 32px; }
+    .scene-svg { height: 110px; }
+    .scene-credit { font-size: 10.5px; bottom: 8px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="layout">
-  <div class="sidebar">
-    <div class="sidebar-card">
-      <div class="sidebar-heading"><i class="ti ti-file-description"></i> About</div>
-      <div class="sidebar-text">Upload a research paper or paste a DOI to get a structured summary covering contribution, methodology, gaps, findings, and future directions.</div>
-      <hr>
-      <div class="sidebar-heading" style="font-size:0.85rem;">Recent papers</div>
-      <div id="recent-list"><div class="sidebar-footer">Nothing yet — summarize your first paper.</div></div>
-      <hr>
-      <div class="sidebar-footer">Built for NUST Research Directorate</div>
-    </div>
+<div class="sky">
+  <div class="sky-night" aria-hidden="true"></div>
 
-    <div class="kg-card">
-      <div class="kg-heading"><i class="ti ti-topology-star-3"></i> Paper graph</div>
-      <canvas id="kg-canvas" width="420" height="500"></canvas>
-      <div id="kg-legend" class="kg-legend" style="display:none;">
-        <span><span class="kg-dot" style="background:#1D4ED8;"></span> Paper</span>
-        <span><span class="kg-dot" style="background:#7C3AED;"></span> Author</span>
-        <span><span class="kg-dot" style="background:#0F766E;"></span> Journal</span>
-        <span><span class="kg-dot" style="background:#D97706;"></span> Year</span>
-        <span><span class="kg-dot" style="background:#15803D;"></span> Citation</span>
-        <span><span class="kg-dot" style="background:#475569;"></span> Source</span>
+
+  <svg class="deco moon" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">
+    <g fill="#e8f1fb">
+      <rect x="3" y="1" width="4" height="1"/><rect x="2" y="2" width="3" height="1"/>
+      <rect x="1" y="3" width="3" height="2"/><rect x="1" y="5" width="2" height="2"/>
+      <rect x="1" y="7" width="3" height="2"/><rect x="2" y="9" width="3" height="1"/>
+      <rect x="3" y="10" width="4" height="1"/>
+    </g>
+    <g fill="#c6dbee">
+      <rect x="3" y="4" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/>
+    </g>
+  </svg>
+
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
+  <div class="stars" aria-hidden="true"></div>
+
+  <!-- pixel-art decorations -->
+  <svg class="deco tree-tr" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+    <g fill="#5d9c46">
+      <rect x="6" y="0" width="4" height="2"/><rect x="4" y="2" width="8" height="2"/>
+      <rect x="2" y="4" width="12" height="4"/><rect x="1" y="8" width="13" height="2"/>
+      <rect x="2" y="10" width="11" height="2"/><rect x="3" y="12" width="9" height="2"/>
+    </g>
+    <g fill="#3f7030">
+      <rect x="8" y="1" width="2" height="1"/><rect x="5" y="4" width="2" height="2"/>
+      <rect x="10" y="6" width="2" height="2"/><rect x="4" y="9" width="2" height="1"/>
+    </g>
+    <g fill="#7fbf5e">
+      <rect x="6" y="3" width="2" height="1"/><rect x="9" y="5" width="2" height="1"/>
+      <rect x="6" y="11" width="2" height="1"/>
+    </g>
+    <rect x="7" y="14" width="2" height="2" fill="#6b4a2f"/>
+  </svg>
+  <svg class="deco tree-left" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+    <g fill="#548e3f">
+      <rect x="5" y="0" width="6" height="2"/><rect x="3" y="2" width="10" height="3"/>
+      <rect x="1" y="5" width="14" height="5"/><rect x="2" y="10" width="12" height="3"/>
+      <rect x="3" y="13" width="10" height="3"/>
+    </g>
+    <g fill="#396329">
+      <rect x="7" y="1" width="2" height="1"/><rect x="4" y="5" width="3" height="2"/>
+      <rect x="10" y="7" width="3" height="2"/><rect x="5" y="11" width="2" height="2"/>
+    </g>
+    <g fill="#79b957">
+      <rect x="8" y="3" width="2" height="1"/><rect x="6" y="6" width="2" height="1"/>
+      <rect x="9" y="9" width="2" height="1"/><rect x="7" y="13" width="2" height="1"/>
+    </g>
+    <rect x="7" y="15" width="2" height="1" fill="#6b4a2f"/>
+  </svg>
+  <svg class="deco cloud-1" viewBox="0 0 20 9" shape-rendering="crispEdges" fill="#e9f2f9" aria-hidden="true">
+    <rect x="5" y="0" width="5" height="1"/><rect x="4" y="1" width="8" height="1"/>
+    <rect x="3" y="2" width="11" height="1"/><rect x="1" y="3" width="15" height="3"/>
+    <rect x="0" y="6" width="18" height="1"/><rect x="1" y="7" width="16" height="1"/>
+    <rect x="3" y="8" width="12" height="1"/>
+  </svg>
+  <svg class="deco cloud-2" viewBox="0 0 20 9" shape-rendering="crispEdges" fill="#e9f2f9" aria-hidden="true">
+    <rect x="6" y="0" width="6" height="1"/><rect x="5" y="1" width="9" height="1"/>
+    <rect x="3" y="2" width="13" height="1"/><rect x="1" y="3" width="17" height="3"/>
+    <rect x="0" y="6" width="19" height="1"/><rect x="2" y="7" width="15" height="1"/>
+  </svg>
+  <svg class="deco cloud-3" viewBox="0 0 20 9" shape-rendering="crispEdges" fill="#e9f2f9" aria-hidden="true">
+    <rect x="5" y="0" width="5" height="1"/><rect x="4" y="1" width="8" height="1"/>
+    <rect x="3" y="2" width="11" height="1"/><rect x="1" y="3" width="15" height="3"/>
+    <rect x="0" y="6" width="18" height="1"/>
+  </svg>
+
+  <!-- hero -->
+  <div class="hero">
+    <h1>All the research answers
+      <span class="dim">your paper holds</span></h1>
+    <div class="marquee" aria-label="Turn lengthy research papers into clear useful insights in just a few seconds.">
+      <div class="marquee-track">
+        <span class="marquee-item">Turn lengthy research papers into clear useful insights in just a few seconds</span>
+        <span class="marquee-item" aria-hidden="true">Turn lengthy research papers into clear useful insights in just a few seconds</span>
       </div>
-      <div id="kg-empty" class="kg-empty">Summarize a paper to see its scholarly graph — authors, venue, year and citations linked to the paper node.</div>
-      <div id="kg-hint" class="kg-empty" style="display:none;margin-top:6px;">Only the paper and source are shown. Use a <b>DOI</b> to surface authors, journal, year and citations.</div>
     </div>
+    <button class="scroll-cue" onclick="document.querySelector('.app-card').scrollIntoView({ behavior: 'smooth' })" aria-label="Scroll down to the summarizer" title="Scroll down">
+      <span class="cue-label">scroll down</span>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
   </div>
 
-  <div class="main">
-    <h1><i class="ti ti-file-text"></i>AI Research Paper Summarizer</h1>
-    <div class="subtitle">Upload a PDF or paste a DOI to get a structured summary.</div>
+  <!-- big white card -->
+  <div class="stage">
+    <div class="app-card">
 
-    <div class="panel">
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab('pdf')">Upload PDF</div>
-        <div class="tab" onclick="switchTab('doi')">Enter DOI</div>
-      </div>
-
-      <div id="tab-pdf" class="tab-content active">
-        <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
-          <div class="dropzone-left">
-            <i class="ti ti-cloud-upload"></i>
-            <div><p>Click to choose a PDF, or drag &amp; drop it here</p><p class="hint">PDF files only</p></div>
-          </div>
-          <button class="secondary" type="button">Browse files</button>
+      <!-- card header -->
+      <div class="card-head">
+        <div class="card-head-title">
+          <i class="ti ti-file-description"></i>
+          Paper Summarizer
         </div>
-        <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
-        <div id="filename" class="filename"></div>
-        <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled><i class="ti ti-sparkles"></i> Summarize PDF</button>
+        <span class="usage-chip" id="usage-chip"></span>
       </div>
 
-      <div id="tab-doi" class="tab-content">
-        <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
-        <button id="summarize-doi-btn" onclick="summarizeDoi()"><i class="ti ti-sparkles"></i> Summarize DOI</button>
-      </div>
-    </div>
+      <!-- two-column body -->
+      <div class="dashboard-grid">
 
-    <div id="results-area">
-      <div class="empty-state">
-        <i class="ti ti-file-search"></i>
-        <div style="font-weight:600; font-size:1.05rem; color:var(--muted);">No paper summarized yet</div>
-        <div style="font-size:.85rem; margin-top:6px;">Your structured summary will appear here.</div>
+        <!-- LEFT: input -->
+        <div class="input-col">
+          <div class="input-panel">
+            <div class="mode-switch">
+              <div class="tab active" onclick="switchTab('pdf')">Upload PDF</div>
+              <div class="tab" onclick="switchTab('doi')">Enter DOI</div>
+            </div>
+
+            <div id="tab-pdf" class="tab-content active">
+              <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
+                <i class="ti ti-cloud-upload"></i>
+                <p>Drop your PDF here</p>
+                <p class="hint">PDF only &middot; up to 200 MB</p>
+                <span class="browse-link">or click to browse</span>
+              </div>
+              <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
+              <div id="filename" class="filename"></div>
+              <div id="file-card-wrap"></div>
+              <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled style="width:100%;justify-content:center;">
+                <i class="ti ti-sparkles"></i>Summarize
+              </button>
+            </div>
+
+            <div id="tab-doi" class="tab-content">
+              <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
+              <div style="display:flex; gap:8px;">
+                <button onclick="summarizeDoi()" style="flex:1;justify-content:center;">
+                  <i class="ti ti-sparkles"></i>Summarize
+                </button>
+                <button class="secondary" onclick="fillExampleDoi()" title="Fill with an example DOI">
+                  <i class="ti ti-wand"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: results -->
+        <div class="results-col">
+          <div id="results-area">
+            <div class="empty-state">
+              <i class="ti ti-file-description empty-icon"></i>
+              <span>Upload a PDF or paste a DOI to get a structured summary</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard-grid -->
+
+      <div class="card-footer">
+        <div class="card-footer-brand">
+          <i class="ti ti-cpu"></i>
+          <span>FastAPI &middot; gpt-oss-120b via Groq</span>
+        </div>
+        <div class="recent-wrap">
+          <span class="recent-label">Recent:</span>
+          <span id="recent-list"><span style="color:#b8bec6;font-size:11px">None yet</span></span>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- crayon scene footer -->
+  <div class="scene-footer">
+    <svg class="scene-svg" viewBox="0 0 1440 152" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <filter id="wax" x="-4%" y="-12%" width="108%" height="124%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.038 0.055" numOctaves="3" seed="17" result="noise"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="4.5" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="wax-cloud" x="-8%" y="-16%" width="116%" height="132%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.028 0.044" numOctaves="4" seed="3" result="noise"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="5.5" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+
+      <!-- Cloud left -->
+      <g filter="url(#wax-cloud)">
+        <ellipse cx="198" cy="52" rx="82" ry="31" fill="#c6ddf0"/>
+        <ellipse cx="164" cy="63" rx="57" ry="23" fill="#d4e9f8"/>
+        <ellipse cx="244" cy="61" rx="64" ry="24" fill="#d4e9f8"/>
+        <ellipse cx="186" cy="46" rx="44" ry="19" fill="#dff0ff"/>
+        <ellipse cx="224" cy="44" rx="36" ry="16" fill="#dff0ff"/>
+      </g>
+      <!-- Cloud centre -->
+      <g filter="url(#wax-cloud)">
+        <ellipse cx="752" cy="36" rx="100" ry="35" fill="#c6ddf0"/>
+        <ellipse cx="714" cy="48" rx="70" ry="27" fill="#d4e9f8"/>
+        <ellipse cx="800" cy="46" rx="74" ry="26" fill="#d4e9f8"/>
+        <ellipse cx="740" cy="30" rx="54" ry="21" fill="#dff0ff"/>
+        <ellipse cx="778" cy="28" rx="44" ry="18" fill="#dff0ff"/>
+      </g>
+      <!-- Cloud right -->
+      <g filter="url(#wax-cloud)">
+        <ellipse cx="1264" cy="55" rx="78" ry="28" fill="#c6ddf0"/>
+        <ellipse cx="1228" cy="66" rx="56" ry="22" fill="#d4e9f8"/>
+        <ellipse cx="1308" cy="63" rx="60" ry="22" fill="#d4e9f8"/>
+        <ellipse cx="1248" cy="49" rx="42" ry="17" fill="#dff0ff"/>
+        <ellipse cx="1286" cy="46" rx="36" ry="15" fill="#dff0ff"/>
+      </g>
+
+      <!-- ====== GRASS TUFTS ====== -->
+      <g filter="url(#wax)" fill="#6cca40" stroke="#5ab832" stroke-width="0.8">
+        <path d="M28,98 Q31,83 34,98"/>  <path d="M38,97 Q42,80 46,97"/>  <path d="M54,99 Q57,86 60,99"/>
+        <path d="M130,95 Q134,79 138,95"/> <path d="M142,96 Q146,82 150,96"/>
+        <path d="M268,96 Q272,80 276,96"/> <path d="M280,98 Q284,84 288,98"/> <path d="M296,95 Q300,82 304,95"/>
+        <path d="M430,97 Q434,81 438,97"/> <path d="M444,95 Q448,79 452,95"/> <path d="M460,98 Q464,84 468,98"/>
+        <path d="M590,95 Q594,79 598,95"/> <path d="M606,97 Q610,82 614,97"/> <path d="M622,95 Q626,81 630,95"/>
+        <path d="M740,96 Q744,80 748,96"/> <path d="M756,98 Q760,84 764,98"/> <path d="M772,95 Q776,82 780,95"/>
+        <path d="M900,97 Q904,81 908,97"/> <path d="M916,95 Q920,79 924,95"/> <path d="M932,98 Q936,84 940,98"/>
+        <path d="M1060,95 Q1064,80 1068,95"/> <path d="M1076,97 Q1080,83 1084,97"/> <path d="M1092,95 Q1096,81 1100,95"/>
+        <path d="M1220,96 Q1224,80 1228,96"/> <path d="M1238,98 Q1242,84 1246,98"/> <path d="M1254,95 Q1258,82 1262,95"/>
+        <path d="M1370,97 Q1374,81 1378,97"/> <path d="M1388,95 Q1392,80 1396,95"/> <path d="M1406,98 Q1410,84 1414,98"/>
+      </g>
+
+      <!-- Grass fills -->
+      <path filter="url(#wax)"
+        d="M-8,96 C60,88 130,99 220,93 C310,87 400,98 490,91 C580,84 670,97 760,90
+           C850,83 940,96 1030,89 C1120,82 1210,95 1300,88 C1370,83 1420,92 1448,89
+           L1448,154 L-8,154 Z"
+        fill="#479028"/>
+      <path filter="url(#wax)"
+        d="M-8,104 C80,96 180,108 300,102 C420,96 540,107 660,101
+           C780,95 900,106 1020,100 C1140,94 1260,105 1380,99 C1415,97 1438,102 1448,100
+           L1448,154 L-8,154 Z"
+        fill="#58b030"/>
+      <path filter="url(#wax)"
+        d="M-8,112 C110,105 240,116 380,110 C520,104 660,114 800,108
+           C940,102 1080,113 1220,107 C1340,102 1410,109 1448,107
+           L1448,154 L-8,154 Z"
+        fill="#6cc440"/>
+    </svg>
+
+    <div class="scene-credit">
+      Built for <strong>NUST Research Directorate</strong>
+      &nbsp;&middot;&nbsp;
+      by
+      <a href="https://github.com/zorhehs" target="_blank" rel="noopener">@zorhehs</a>
+      &amp;
+      <a href="https://github.com/subhaniq" target="_blank" rel="noopener">@subhaniq</a>
+    </div>
+  </div>
+
 </div>
+
 <script>
 let selectedFile = null;
 let currentPaperText = "";
 let chatHistory = [];
 let recentPapers = [];
+let loadTimer = null;
+
+const SECTION_LABELS = {
+  summary: 'Summary',
+  methodology: 'Methodology',
+  research_gaps: 'Research gaps',
+  findings: 'Findings',
+  future_work: 'Future work',
+};
 
 function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
-
-const API_BASE = ""; // same origin as the FastAPI server serving this page
 
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -243,22 +832,45 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
 }
 
-function setSelectedFile(file) {
+function onFileSelected() {
+  const input = document.getElementById('file-input');
+  setFile(input.files[0]);
+}
+
+function setFile(file) {
   if (!file) return;
   if (!file.name.toLowerCase().endsWith('.pdf')) {
-    showError('<i class="ti ti-alert-circle"></i> Please choose a PDF file.');
+    showError('Please choose a PDF file.');
     return;
   }
   selectedFile = file;
-  document.getElementById('filename').textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  const sizeKb = file.size < 1024 * 1024
+    ? (file.size / 1024).toFixed(0) + ' KB'
+    : (file.size / 1024 / 1024).toFixed(1) + ' MB';
+  document.getElementById('file-card-wrap').innerHTML = `
+    <div class="file-card">
+      <div class="file-card-icon"><i class="ti ti-file-type-pdf"></i></div>
+      <div class="file-card-info">
+        <div class="file-card-name">${escapeHtml(file.name)}</div>
+        <div class="file-card-size">${sizeKb}</div>
+      </div>
+      <button class="file-card-remove" type="button" onclick="clearFile()" title="Remove file">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`;
+  document.getElementById('dropzone').style.display = 'none';
   document.getElementById('summarize-pdf-btn').disabled = false;
 }
 
-function onFileSelected() {
-  setSelectedFile(document.getElementById('file-input').files[0]);
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('file-card-wrap').innerHTML = '';
+  document.getElementById('dropzone').style.display = '';
+  document.getElementById('file-input').value = '';
+  document.getElementById('summarize-pdf-btn').disabled = true;
 }
 
-// Drag & drop support
+// Drag & drop
 window.addEventListener('DOMContentLoaded', () => {
   const dz = document.getElementById('dropzone');
   ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => {
@@ -267,131 +879,150 @@ window.addEventListener('DOMContentLoaded', () => {
   ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => {
     e.preventDefault(); dz.classList.remove('dragover');
   }));
-  dz.addEventListener('drop', e => setSelectedFile(e.dataTransfer.files[0]));
+  dz.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+
+  // Enter key submits the DOI
+  document.getElementById('doi-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') summarizeDoi();
+  });
+
+  loadRecent();
+  applyTheme(localStorage.getItem('theme') || 'light');
+  refreshUsage();
+  fillMarquee();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fillMarquee);
+  window.addEventListener('resize', fillMarquee);
+  initParallax();
+  initScrollCueFade();
 });
 
-let loadingInterval = null;
-let thinkingTimeout = null;
-let isBusy = false;
+// Ensure the ticker has enough repeated copies to always cover the full viewport width
+function fillMarquee() {
+  const track = document.querySelector('.marquee-track');
+  if (!track || !track.children.length) return;
+  const item = track.children[0];
+  const w = item.offsetWidth || 1;
+  const needed = Math.max(2, Math.ceil((2 * window.innerWidth) / w));
+  const total = needed + (needed % 2); // even count keeps the -50% loop seamless
+  while (track.children.length < total) {
+    const clone = item.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    track.appendChild(clone);
+  }
+  // constant scroll speed (~28px/s) no matter how many copies were added
+  track.style.animationDuration = Math.round(track.scrollWidth / 2 / 28) + 's';
+}
 
-function showThinking() {
-  // LLM-style chain-of-thought lines, revealed top to bottom
-  const steps = [
-    "Okay, let me start by reading through the paper...",
-    "Skimming the abstract — so the core contribution seems to be...",
-    "Now let me trace how they actually ran the study: data, model, experiments...",
-    "Checking the results tables... what did they really demonstrate?",
-    "Hmm, where does this fall short? Let me note the limitations and open questions...",
-    "What would I try next if I were the authors?...",
-    "Alright, I have the full picture — writing up the structured summary now."
-  ];
-  let current = 0;
-  let typeTimer = null;
-
+function showLoading() {
+  const t0 = Date.now();
+  const rows = Object.keys(SECTION_LABELS).map(k =>
+    `<div class="load-section" id="ls-${k}"><i class="ti ti-loader-2"></i><span>${SECTION_LABELS[k]}</span></div>`
+  ).join('');
   document.getElementById('results-area').innerHTML = `
-    <div class="thinking">
-      <div class="thinking-header">
-        <div class="thinking-orb"><i class="ti ti-brain"></i></div>
-        <div>
-          <div class="thinking-title">The AI is thinking<span class="dots"></span></div>
-          <div class="thinking-sub">Reasoning through the paper step by step</div>
-        </div>
-      </div>
-      <div class="thinking-steps" id="thinking-steps"></div>
-      <div class="thinking-bar"></div>
-    </div>
-  `;
-  resultsIntoView();
-
-  if (loadingInterval) clearInterval(loadingInterval);
-
-  const typeText = (el, text) => {
-    let i = 0;
-    el.innerHTML = '<span class="text"></span><span class="cursor"></span>';
-    const target = el.querySelector('.text');
-    clearInterval(typeTimer);
-    typeTimer = setInterval(() => {
-      if (!document.getElementById('thinking-steps')) { clearInterval(typeTimer); return; }
-      i++;
-      target.textContent = text.slice(0, i);
-      if (i >= text.length) clearInterval(typeTimer);
-    }, 18);
-  };
-
-  const advance = () => {
-    if (!document.getElementById('thinking-steps')) return;
-
-    if (current > 0) {
-      const prev = document.querySelector(`.thinking-step[data-i="${current - 1}"]`);
-      if (prev) {
-        prev.classList.remove('active');
-        prev.classList.add('done');
-        prev.querySelector('.status-icon').innerHTML = '<i class="ti ti-check"></i>';
-      }
-    }
-
-    if (current >= steps.length) {
-      clearInterval(loadingInterval);
-      return;
-    }
-
-    const step = document.createElement('div');
-    step.className = 'thinking-step active';
-    step.dataset.i = current;
-    step.innerHTML = `<span class="status-icon"><i class="ti ti-loader-2"></i></span><span class="step-text"></span>`;
-    document.getElementById('thinking-steps').appendChild(step);
-    requestAnimationFrame(() => step.classList.add('visible'));
-    typeText(step.querySelector('.step-text'), steps[current]);
-
-    current++;
-    const delay = current === 1 ? 3200 : 4200 + Math.random() * 2000;
-    thinkingTimeout = setTimeout(advance, delay);
-  };
-
-  // kick things off
-  thinkingTimeout = setTimeout(advance, 300);
+    <div class="loading">Summarizing<span class="dots"></span> <span id="elapsed" style="font-size:11.5px;color:#b0b6bd;"></span></div>
+    <div class="loading-bar"></div>
+    <div class="load-sections">${rows}</div>`;
+  loadTimer = setInterval(() => {
+    const el = document.getElementById('elapsed');
+    if (el) el.textContent = `(${Math.round((Date.now() - t0) / 1000)}s elapsed)`;
+  }, 1000);
 }
 
-function clearLoader() {
-  if (loadingInterval) { clearInterval(loadingInterval); loadingInterval = null; }
-  if (thinkingTimeout) { clearTimeout(thinkingTimeout); thinkingTimeout = null; }
+function markSectionDone(section) {
+  const row = document.getElementById('ls-' + section);
+  if (row) {
+    row.classList.add('done');
+    row.querySelector('i').className = 'ti ti-check';
+  }
 }
+
+function clearLoading() { if (loadTimer) { clearInterval(loadTimer); loadTimer = null; } }
 
 function showError(msg) {
-  clearLoader();
-  document.getElementById('results-area').innerHTML = `<div class="error-box">${msg}</div>`;
+  clearLoading();
+  document.getElementById('results-area').innerHTML = `
+    <div style="padding: 8px 0">
+      <div class="error-box"><i class="ti ti-alert-circle" style="vertical-align:-2px;margin-right:6px"></i>${msg}</div>
+    </div>`;
 }
 
-function resultsIntoView() {
-  document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function setBusy(busy) {
-  isBusy = busy;
-  const pdfBtn = document.getElementById('summarize-pdf-btn');
-  if (pdfBtn) pdfBtn.disabled = busy || !selectedFile;
-  const doiBtn = document.getElementById('summarize-doi-btn');
-  if (doiBtn) doiBtn.disabled = busy;
-}
-
-async function runSummarize(formData, label) {
-  if (isBusy) return;
-  setBusy(true);
-  showThinking();
-  try {
-    const res = await fetch(`${API_BASE}/summarize`, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (res.ok) {
-      renderResults(data);
-      addRecent(data.title || label);
-    } else {
-      showError(`<i class="ti ti-alert-circle"></i> <strong>Error ${res.status}.</strong> ${escapeHtml(data.detail || 'Unknown error')}`);
+function postForm(url, formData) {
+  return fetch(url, { method: 'POST', body: formData }).then(async res => {
+    if (!res.ok) {
+      let detail = 'Unknown error';
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      const err = new Error(`Error ${res.status}: ${detail}`);
+      err.fatal = true;
+      throw err;
     }
-  } catch (e) {
-    showError(`<i class="ti ti-plug-off"></i> Could not reach the server: ${escapeHtml(e.message)}. Is it still running?`);
-  } finally {
-    setBusy(false);
+    return res;
+  });
+}
+
+async function streamSummarize(formData) {
+  const res = await postForm('/summarize/stream', formData);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', result = null, streamError = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const line = chunk.split('\n').find(l => l.startsWith('data: '));
+      if (!line) continue;
+      const ev = JSON.parse(line.slice(6));
+      if (ev.type === 'section_done') markSectionDone(ev.section);
+      else if (ev.type === 'done') result = ev.result;
+      else if (ev.type === 'error') streamError = ev.detail;
+    }
   }
+  if (streamError) {
+    const friendly = /rate_limit|429/i.test(streamError)
+      ? "Our AI provider's quota is temporarily exhausted. Please try again later."
+      : streamError;
+    throw Object.assign(new Error(friendly), { fatal: true });
+  }
+  if (!result) throw new Error('Stream ended unexpectedly.');
+  return result;
+}
+
+async function plainSummarize(formData) {
+  const res = await postForm('/summarize', formData);
+  return res.json();
+}
+
+async function runSummarize(formData, sourceLabel) {
+  setBusy(true);
+  showLoading();
+  let data = null;
+  try {
+    data = await streamSummarize(formData);
+  } catch (e) {
+    if (e.fatal) {
+      showError(escapeHtml(e.message));
+      setBusy(false);
+      refreshUsage();
+      return;
+    }
+    // Streaming unavailable → fall back to the plain endpoint
+    try {
+      data = await plainSummarize(formData);
+    } catch (e2) {
+      showError(escapeHtml(e2.message));
+      setBusy(false);
+      refreshUsage();
+      return;
+    }
+  }
+  renderResults(data);
+  addRecent(data.title || sourceLabel, formData.get('doi') || null);
+  setBusy(false);
+  refreshUsage();
+  if (!data.cached) pixelCelebration();
 }
 
 async function summarizePdf() {
@@ -409,125 +1040,164 @@ async function summarizeDoi() {
   await runSummarize(formData, doi);
 }
 
-function addRecent(title) {
-  recentPapers.unshift(title);
+function setBusy(busy) {
+  document.getElementById('summarize-pdf-btn').disabled = busy || !selectedFile;
+  const doiBtn = document.querySelector('#tab-doi button');
+  if (doiBtn) doiBtn.disabled = busy;
+}
+
+function addRecent(title, doi) {
+  recentPapers.unshift(doi ? { t: title, doi } : { t: title });
   recentPapers = recentPapers.slice(0, 5);
   try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers)); } catch (e) {}
   renderRecent();
 }
 
 function loadRecent() {
-  try { recentPapers = JSON.parse(localStorage.getItem('recent_papers') || '[]'); } catch (e) { recentPapers = []; }
+  try {
+    recentPapers = (JSON.parse(localStorage.getItem('recent_papers') || '[]') || [])
+      .map(item => (typeof item === 'string' ? { t: item } : item));
+  } catch (e) { recentPapers = []; }
   renderRecent();
 }
 
 function renderRecent() {
   document.getElementById('recent-list').innerHTML = recentPapers.length
     ? recentPapers
-        .map(t => `<div class="sidebar-recent"><i class="ti ti-file-text"></i> <span>${escapeHtml(String(t).slice(0, 40))}${String(t).length > 40 ? '…' : ''}</span></div>`)
+        .map(p => {
+          const label = escapeHtml(String(p.t).slice(0, 34)) + (String(p.t).length > 34 ? '...' : '');
+          const clickable = p.doi ? ` style="cursor:pointer" title="Summarize this DOI again" onclick="rerunDoi(this)" data-doi="${escapeHtml(p.doi)}"` : '';
+          return `<span class="recent-item"${clickable}><i class="ti ti-file-text"></i>${label}</span>`;
+        })
         .join('')
-    : '<div class="sidebar-footer">Nothing yet — summarize your first paper.</div>';
+    : '<span style="color:#b0b6bd">None yet</span>';
 }
 
-loadRecent();
+function rerunDoi(el) {
+  const doi = el.dataset.doi;
+  if (!doi) return;
+  switchTab('doi');
+  document.getElementById('doi-input').value = doi;
+  summarizeDoi();
+}
+
 function renderResults(data) {
-  clearLoader();
-  currentPaperText = data.full_text || data.summary || "";
+  clearLoading();
+  currentPaperText = data.full_text || data.summary;
   chatHistory = [];
 
-  const fieldText = k => (data[k] == null ? "" : String(data[k]));
-  const originalWords = currentPaperText.split(/\s+/).filter(Boolean).length;
+  const fieldText = k => String(data[k] == null ? "" : data[k]);
+  const originalWords = (data.full_text || "").split(/\s+/).filter(Boolean).length;
   const summaryWords = ["summary","methodology","research_gaps","findings","future_work"]
     .reduce((sum, k) => sum + fieldText(k).split(/\s+/).filter(Boolean).length, 0);
-  const reduction = Math.min(99, originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0);
+  const reduction = originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0;
   const readMin = Math.max(1, Math.round(summaryWords / 200));
 
   document.getElementById('results-area').innerHTML = `
-    <div class="paper-header">
-      <div class="paper-title">${escapeHtml(data.title || "Untitled paper")}</div>
-      ${data.authors && data.authors.length ? `<div class="paper-authors">${escapeHtml(data.authors.join(", "))}</div>` : ""}
-      <span class="tag"><i class="ti ti-file"></i> Source: ${escapeHtml(data.source || "unknown")}</span>
-      ${data.year ? `<span class="tag"><i class="ti ti-calendar"></i> ${escapeHtml(data.year)}</span>` : ""}
-      ${data.journal ? `<span class="tag"><i class="ti ti-book"></i> ${escapeHtml(data.journal)}</span>` : ""}
-      ${data.cited_by != null ? `<span class="tag"><i class="ti ti-quote"></i> ${data.cited_by} citations</span>` : ""}
-      ${data.cached ? `<span class="tag" style="border-color:#D5E8BC;color:#3B6D11;"><i class="ti ti-bolt"></i> cached</span>` : ""}
-      <span class="tag"><i class="ti ti-clock"></i> ~${readMin} min read</span>
-      ${data.abstract ? `<div class="paper-abstract"><span class="abs-label">Abstract.</span> ${escapeHtml(data.abstract)}</div>` : ""}
+    <div class="paper-title">${escapeHtml(data.title || "Untitled paper")}</div>
+    <div class="tag-row">
+      <span class="tag">${escapeHtml(data.source || 'unknown')}</span>
+      ${data.year ? `<span class="tag">${escapeHtml(data.year)}</span>` : ""}
+      ${data.journal ? `<span class="tag">${escapeHtml(String(data.journal).slice(0, 40))}</span>` : ""}
+      ${data.cited_by != null ? `<span class="tag">${data.cited_by} citations</span>` : ""}
+      ${data.cached ? `<span class="tag">cached</span>` : ""}
     </div>
 
     <div class="stats">
-      <span class="stat"><b>${originalWords.toLocaleString()}</b> words original</span>
-      <span class="sep">·</span>
-      <span class="stat"><b>${summaryWords.toLocaleString()}</b> words summary</span>
-      <span class="sep">·</span>
-      <span class="stat saved"><b>~${reduction}%</b> time saved</span>
-      <span class="sep">·</span>
-      <span class="stat"><b>~${readMin}</b> min read</span>
+      <p class="stats-label">Reading time saved</p>
+      <div class="stats-big">
+        <span class="num" id="stat-num">0%</span>
+        <span class="pill good"><i class="ti ti-clock"></i>~${readMin} min read</span>
+      </div>
+      <div class="statbar" style="margin-bottom:16px"><div class="fill" id="stat-fill" style="width:0%"></div></div>
+      <div class="stat-row"><span>Original paper</span><span class="val">${originalWords.toLocaleString()} words</span></div>
+      <div class="stat-row"><span>Summary</span><span class="val">${summaryWords.toLocaleString()} words</span></div>
+      <div class="stat-row"><span>Reading time</span><span class="val">~${readMin} min</span></div>
     </div>
 
-    <div class="paper-body">
-      ${card(1, "Summary", fieldText("summary"))}
-      ${card(2, "Methodology", fieldText("methodology"))}
-      ${card(3, "Research Gaps", fieldText("research_gaps"))}
-      ${card(4, "Findings", fieldText("findings"))}
-      ${card(5, "Future Work", fieldText("future_work"))}
+    <div class="results">
+      ${card("Summary", fieldText("summary"))}
+      ${card("Findings", fieldText("findings"))}
+      ${card("Methodology", fieldText("methodology"))}
+      ${card("Future work", fieldText("future_work"))}
+      ${card("Research gaps", fieldText("research_gaps"))}
     </div>
 
-    <div class="actions-row">
-      <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i> Download as text</button>
-      <button class="secondary" onclick="copyAll()"><i class="ti ti-copy"></i> Copy full summary</button>
+    <div class="action-row">
+      <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i>Export .txt</button>
+      <button class="secondary" onclick="downloadMarkdown()"><i class="ti ti-markdown"></i>.md</button>
+      <button class="secondary" onclick="exportPdf()"><i class="ti ti-file-type-pdf"></i>PDF</button>
     </div>
 
     <div class="chat-section">
-      <div class="chat-heading"><i class="ti ti-message-circle"></i> Ask about this paper</div>
+      <p class="chat-heading">Ask about this paper</p>
       <div id="chat-messages"></div>
+      <div class="chat-suggestions" id="chat-suggestions">
+        <span class="chip" onclick="askSuggestion('What is the main contribution of this paper?')">Main contribution?</span>
+        <span class="chip" onclick="askSuggestion('Explain the methodology in simple terms.')">Methodology explained simply</span>
+        <span class="chip" onclick="askSuggestion('What are the limitations and open questions?')">Limitations?</span>
+      </div>
       <div class="chat-input-row">
         <input type="text" id="chat-input" placeholder="Ask a question about this paper..." onkeypress="if(event.key==='Enter') sendChat()">
-        <button onclick="sendChat()"><i class="ti ti-send"></i> Send</button>
+        <i class="ti ti-send" onclick="sendChat()"></i>
       </div>
     </div>
   `;
 
   window.currentResult = data;
-  resultsIntoView();
-  kgStart(data);
+  animateCount(document.getElementById('stat-num'), reduction);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const fill = document.getElementById('stat-fill');
+    if (fill) fill.style.width = Math.max(3, Math.min(100, reduction)) + '%';
+  }));
 }
-// Turn plain-text output into proper HTML lists where the model used
-// "- " bullets or "1." numbered lines; keep paragraphs for prose.
-function formatBody(raw) {
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-  let html = '';
+
+function animateCount(el, target) {
+  if (!el) return;
+  const t0 = performance.now(), dur = 900;
+  function tick(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * eased) + '%';
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function renderSectionBody(text) {
+  const lines = String(text).split('\n');
+  const out = [];
   let list = null; // 'ul' | 'ol'
-  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
-  for (const rawLine of lines) {
-    const line = escapeHtml(rawLine);
-    const bullet = line.match(/^[•\-*]\s+(.*)$/);
-    const numbered = line.match(/^\d+[.)]\s+(.*)$/);
-    if (bullet) {
-      if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; }
-      html += `<li>${bullet[1]}</li>`;
-    } else if (numbered) {
-      if (list !== 'ol') { closeList(); html += '<ol>'; list = 'ol'; }
-      html += `<li>${numbered[1]}</li>`;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    let m;
+    if ((m = line.match(/^[-•*]\s+(.*)/))) {
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${escapeHtml(m[1])}</li>`);
+    } else if ((m = line.match(/^\d+[.)]\s+(.*)/))) {
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${escapeHtml(m[1])}</li>`);
     } else {
       closeList();
-      html += `<p>${line}</p>`;
+      out.push(`<p class="sec-paragraph">${escapeHtml(line)}</p>`);
     }
   }
   closeList();
-  return html;
+  return out.join('');
 }
 
-function card(num, title, body) {
+function card(title, body) {
   const text = String(body == null ? "" : body).trim();
-  if (!text || text === "Data not provided by the model.") return ""; // skip empty sections
+  if (!text || text === "Data not provided by the model.") return "";
   return `
     <div class="result-card">
       <div class="result-card-header">
-        <span><span class="section-num">${num}.</span> ${escapeHtml(title)}</span>
+        <span>${escapeHtml(title)}</span>
         <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(text)}"></i>
       </div>
-      <div class="result-card-body">${formatBody(text)}</div>
+      <div class="result-card-body">${renderSectionBody(text)}</div>
     </div>
   `;
 }
@@ -538,282 +1208,213 @@ function copyText(el) {
   el.className = 'ti ti-check copy-btn';
   setTimeout(() => { el.className = 'ti ti-copy copy-btn'; }, 1500);
 }
-function copyAll() {
-  const d = window.currentResult;
-  if (!d) return;
-  const text = `1. Summary\n${d.summary}\n\n2. Methodology\n${d.methodology}\n\n3. Research Gaps\n${d.research_gaps}\n\n4. Findings\n${d.findings}\n\n5. Future Work\n${d.future_work}`;
-  navigator.clipboard.writeText(text);
-}
 
 function downloadSummary() {
   const d = window.currentResult;
-  if (!d) return;
-  const report = `# ${d.title}\n\n## Abstract\n${d.abstract || ''}\n\n## 1. Summary\n${d.summary}\n\n## 2. Methodology\n${d.methodology}\n\n## 3. Research Gaps\n${d.research_gaps}\n\n## 4. Findings\n${d.findings}\n\n## 5. Future Work\n${d.future_work}`;
+  const report = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Future Work\n${d.future_work}`;
   const blob = new Blob([report], { type: 'text/plain' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'paper_summary.txt';
   link.click();
 }
+
+function exportPdf() {
+  const d = window.currentResult;
+  if (!d) return;
+  const esc = escapeHtml;
+  const sec = (t, b) => (b && b.trim() ? `<h2>${t}</h2><div class="sec">${esc(b)}</div>` : "");
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(d.title || 'Paper summary')}</title>
+    <style>
+      body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; line-height: 1.7; padding: 0 20px; }
+      h1 { font-size: 1.5rem; letter-spacing: -.01em; border-bottom: 2px solid #1a1a1a; padding-bottom: 12px; }
+      h2 { font-size: 1rem; margin: 26px 0 8px; text-transform: uppercase; letter-spacing: .06em; }
+      .sec { font-size: .92rem; color: #333; white-space: pre-wrap; }
+      .meta { color: #777; font-size: .85rem; margin: 10px 0 0; }
+      @media print { .noprint { display: none; } }
+    </style></head><body>
+    <h1>${esc(d.title || 'Untitled paper')}</h1>
+    ${d.authors && d.authors.length ? `<p class="meta">${esc(d.authors.join(', '))}</p>` : ""}
+    ${d.journal ? `<p class="meta">${esc(d.journal)}${d.year ? ' · ' + esc(d.year) : ''}</p>` : ""}
+    ${sec('Summary', d.summary)}
+    ${sec('Methodology', d.methodology)}
+    ${sec('Research Gaps', d.research_gaps)}
+    ${sec('Findings', d.findings)}
+    ${sec('Future Work', d.future_work)}
+    <p class="noprint" style="margin-top:30px;"><button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">Save as PDF</button></p>
+    </body></html>`);
+  w.document.close();
+}
+
+function downloadMarkdown() {
+  const d = window.currentResult;
+  if (!d) return;
+  const report = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Future Work\n${d.future_work}`;
+  const blob = new Blob([report], { type: 'text/markdown' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'paper_summary.md';
+  link.click();
+}
+
+function fillExampleDoi() {
+  document.getElementById('doi-input').value = '10.1371/journal.pone.0121283';
+}
+
 async function sendChat() {
   const input = document.getElementById('chat-input');
-  const sendBtn = input.parentElement.querySelector('button');
   const question = input.value.trim();
-  if (!question || sendBtn.disabled) return;
+  if (!question) return;
   input.value = '';
-  sendBtn.disabled = true;
+  const suggestions = document.getElementById('chat-suggestions');
+  if (suggestions) suggestions.remove();
 
   chatHistory.push({ role: 'user', content: question });
   renderChat();
   const box = document.getElementById('chat-messages');
-  box.insertAdjacentHTML('beforeend', '<div class="chat-bubble assistant typing" id="chat-typing"><span></span><span></span><span></span></div>');
+  box.insertAdjacentHTML('beforeend', '<div class="chat-bubble assistant chat-typing" id="chat-typing"><span></span><span></span><span></span></div>');
   box.scrollTop = box.scrollHeight;
 
-  try {
-    const res = await fetch(`${API_BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      chatHistory.push({ role: 'assistant', content: data.answer });
-    } else {
-      chatHistory.push({ role: 'assistant', content: `⚠️ ${data.detail || 'Something went wrong. Please try again.'}` });
-    }
-  } catch (e) {
-    chatHistory.push({ role: 'assistant', content: `⚠️ Could not reach the server: ${e.message}` });
-  } finally {
-    sendBtn.disabled = false;
-    renderChat();
+  const answer = await askChatWithRetry(question);
+  chatHistory.push({ role: 'assistant', content: answer });
+  renderChat();
+}
+
+async function askChatWithRetry(question, attempts = 2) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data.answer;
+      // Client errors (400/429/etc.) won't get better on retry
+      if (res.status < 500) return `⚠️ ${data.detail || 'Something went wrong. Please try again.'}`;
+    } catch (e) { /* network error → retry */ }
+    if (i < attempts - 1) await new Promise(r => setTimeout(r, 900));
   }
+  return '⚠️ Could not reach the server. Please try again.';
+}
+
+function askSuggestion(question) {
+  document.getElementById('chat-input').value = question;
+  sendChat();
+}
+
+async function refreshUsage() {
+  try {
+    const res = await fetch('/usage-status');
+    if (!res.ok) return;
+    const { used, limit } = await res.json();
+    const chip = document.getElementById('usage-chip');
+    if (!chip) return;
+    const left = Math.max(0, limit - used);
+    chip.textContent = left > 0 ? `${left} of ${limit} summaries left today` : 'Daily limit reached';
+    chip.classList.toggle('warn', left === 0);
+    chip.style.display = 'inline-block';
+  } catch (e) { /* chip stays hidden */ }
+}
+
+function initScrollCueFade() {
+  const cue = document.querySelector('button.scroll-cue');
+  if (!cue) return;
+
+  // Wrap in a container so the fade/slide doesn't fight the bob animation
+  // (bob runs on the button via CSS transform; we control the wrapper)
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;' +
+    'will-change:opacity,transform;transition:opacity .22s ease,transform .22s ease;';
+  cue.parentNode.insertBefore(wrap, cue);
+  wrap.appendChild(cue);
+
+  function update() {
+    // Fade fully out over the first 200px of scroll
+    const progress = Math.min(1, window.scrollY / 200);
+    const opacity  = 1 - progress;
+    wrap.style.opacity      = opacity.toFixed(3);
+    // Drift upward 24px as it vanishes — the motion-graphic feel
+    wrap.style.transform    = `translateY(${(progress * -24).toFixed(1)}px)`;
+    wrap.style.pointerEvents = progress > 0.9 ? 'none' : '';
+  }
+
+  let raf = null;
+  window.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = null; update(); });
+  }, { passive: true });
+
+  update(); // sync immediately in case page was already scrolled on load
+}
+
+function initParallax() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!window.matchMedia('(pointer: fine)').matches) return;
+  const layers = [
+    { el: document.querySelector('.deco.tree-tr'), f: 14 },
+    { el: document.querySelector('.deco.tree-left'), f: 18 },
+    { el: document.querySelector('.deco.moon'), f: 10 },
+  ].filter(l => l.el);
+  if (!layers.length) return;
+  let raf = null;
+  window.addEventListener('pointermove', e => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      const nx = e.clientX / window.innerWidth - .5;
+      const ny = e.clientY / window.innerHeight - .5;
+      layers.forEach(({ el, f }) => {
+        el.style.translate = `${(-nx * f).toFixed(1)}px ${(-ny * f).toFixed(1)}px`;
+      });
+    });
+  });
+}
+
+function pixelCelebration() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const card = document.querySelector('.app-card');
+  if (!card) return;
+  const colors = ['#4cc9f0', '#8cc76a', '#ffd94d', '#ffffff', '#4787c3'];
+  const rect = card.getBoundingClientRect();
+  for (let n = 0; n < 26; n++) {
+    const px = document.createElement('div');
+    const size = 5 + Math.random() * 6;
+    px.style.cssText = `position:fixed;z-index:60;width:${size.toFixed(0)}px;height:${size.toFixed(0)}px;`
+      + `background:${colors[n % colors.length]};left:${(rect.left + Math.random() * rect.width).toFixed(0)}px;`
+      + `top:${(rect.top + 10).toFixed(0)}px;pointer-events:none;border-radius:1px;`;
+    document.body.appendChild(px);
+    const dx = (Math.random() - .5) * 130;
+    const dy = 130 + Math.random() * 170;
+    const rot = (Math.random() - .5) * 400;
+    px.animate([
+      { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+      { transform: `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`, opacity: 0 },
+    ], { duration: 900 + Math.random() * 700, easing: 'cubic-bezier(.2,.6,.4,1)' }).onfinish = () => px.remove();
+  }
+}
+
+function applyTheme(theme) {
+  document.body.classList.toggle('dark', theme === 'dark');
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.className = theme === 'dark' ? 'ti ti-sun' : 'ti ti-moon';
+}
+
+function toggleTheme() {
+  const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  applyTheme(next);
 }
 
 function renderChat() {
-  const box = document.getElementById('chat-messages');
-  box.innerHTML = chatHistory
+  document.getElementById('chat-messages').innerHTML = chatHistory
     .map(m => `<div class="chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`)
     .join('');
+  const box = document.getElementById('chat-messages');
   box.scrollTop = box.scrollHeight;
 }
-/* ===== Obsidian-like knowledge graph ===== */
-let kgSim = null; // { nodes, edges, canvas, ctx, raf, drag }
-
-function kgStop() {
-  if (kgSim) { cancelAnimationFrame(kgSim.raf); kgSim = null; }
-}
-
-function kgBuild(data) {
-  const nodes = [];
-  const edges = [];
-  const add = (id, label, type, r) => { const n = { id, label, type, r }; nodes.push(n); return n; };
-
-  const paper = add('paper', (data.title || 'Untitled paper').slice(0, 40), 'paper', 15);
-
-  // Contributors / authors (from DOI / Crossref metadata)
-  const authors = (Array.isArray(data.authors) ? data.authors : []).filter(Boolean);
-  authors.slice(0, 6).forEach(a => {
-    const n = add('auth:' + a, a, 'author', 9);
-    edges.push([paper, n]);
-  });
-  if (authors.length > 6) {
-    const n = add('auth:more', `+${authors.length - 6} authors`, 'author', 8);
-    edges.push([paper, n]);
-  }
-
-  // Venue / journal
-  if (data.journal) {
-    const n = add('journal', data.journal.slice(0, 32), 'journal', 10);
-    edges.push([paper, n]);
-  }
-
-  // Publication year
-  if (data.year) {
-    const n = add('year', String(data.year), 'year', 9);
-    edges.push([paper, n]);
-  }
-
-  // Citation count
-  const cited = data.cited_by;
-  if (cited != null && cited !== '') {
-    const n = add('cite', `Cited by ${cited}`, 'citation', 10);
-    edges.push([paper, n]);
-  }
-
-  // Input source: PDF vs DOI
-  const n = add('source', `Source: ${String(data.source || 'unknown').toUpperCase()}`, 'source', 8);
-  edges.push([paper, n]);
-
-  return { nodes, edges };
-}
-function kgStart(data) {
-  kgStop();
-  const canvas = document.getElementById('kg-canvas');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  const built = kgBuild(data);
-  kgSim = { ...built, canvas, ctx, raf: null, drag: null };
-  const { nodes, edges } = kgSim;
-
-  // initial layout: paper center, others in a balanced ring
-  nodes[0].x = W / 2; nodes[0].y = H / 2; nodes[0].vx = 0; nodes[0].vy = 0;
-  const ringR = Math.min(145, 62 + (nodes.length - 1) * 15);
-  nodes.slice(1).forEach((n, i) => {
-    const a = (2 * Math.PI * i) / (nodes.length - 1) - Math.PI / 2;
-    n.x = W / 2 + Math.cos(a) * ringR;
-    n.y = H / 2 + Math.sin(a) * ringR;
-    n.vx = 0; n.vy = 0;
-  });
-
-  const step = () => {
-    if (!kgSim) return;
-    let energy = 0;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = a.x - b.x, dy = a.y - b.y;
-        const d2 = dx * dx + dy * dy || 1;
-        const minD = (a.r + b.r) * 3.5;
-        if (d2 < minD * minD) {
-          const f = Math.min(2.5, minD * minD / (d2 * 14));
-          const d = Math.sqrt(d2);
-          dx /= d; dy /= d;
-          a.vx += dx * f; a.vy += dy * f;
-          b.vx -= dx * f; b.vy -= dy * f;
-        }
-      }
-    }
-    for (const [a, b] of edges) {
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const f = Math.min(1.2, (d - 85) * 0.015);
-      a.vx += (dx / d) * f; a.vy += (dy / d) * f;
-      b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
-    }
-    for (const n of nodes) {
-      const g = n.type === 'paper' ? 0.02 : 0.008;
-      n.vx += (W / 2 - n.x) * g * 0.12;
-      n.vy += (H / 2 - n.y) * g * 0.12;
-      n.vx *= 0.82; n.vy *= 0.82;
-      // clamp speed so the graph never explodes
-      const sp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-      if (sp > 4) { n.vx = n.vx / sp * 4; n.vy = n.vy / sp * 4; }
-      n.x += n.vx; n.y += n.vy;
-      energy += n.vx * n.vx + n.vy * n.vy;
-      const pad = n.r + 16;
-      n.x = Math.max(pad, Math.min(W - pad, n.x));
-      n.y = Math.max(pad + 6, Math.min(H - pad - 10, n.y));
-    }
-    kgDraw();
-    // settle: stop the sim when quiet, restart it on drag
-    if (energy < 0.4 && !kgSim.drag) { kgSim.settled = true; return; }
-    kgSim.raf = requestAnimationFrame(step);
-  };
-  step();
-
-  canvas.onmousedown = e => {
-    const n = kgNodeAt(kgPos(e));
-    if (n) { kgSim.drag = n; e.preventDefault(); }
-  };
-  canvas.onmousemove = e => {
-    if (!kgSim) return;
-    if (kgSim.drag) {
-      const p = kgPos(e);
-      kgSim.drag.x = p.x; kgSim.drag.y = p.y; kgSim.drag.vx = 0; kgSim.drag.vy = 0;
-      if (kgSim.settled) { kgSim.settled = false; kgSim.raf = requestAnimationFrame(step); }
-    } else {
-      canvas.style.cursor = kgNodeAt(kgPos(e)) ? 'pointer' : 'grab';
-    }
-  };
-  window.addEventListener('mouseup', kgRelease);
-
-  document.getElementById('kg-empty').style.display = 'none';
-  document.getElementById('kg-legend').style.display = 'flex';
-  document.getElementById('kg-hint').style.display = nodes.length <= 2 ? 'block' : 'none';
-}
-
-function kgRelease() { if (kgSim) kgSim.drag = null; }
-function kgPos(e) {
-  const rect = kgSim.canvas.getBoundingClientRect();
-  return { x: (e.clientX - rect.left) * (kgSim.canvas.width / rect.width), y: (e.clientY - rect.top) * (kgSim.canvas.height / rect.height) };
-}
-
-function kgNodeAt(p) {
-  if (!kgSim) return null;
-  for (let i = kgSim.nodes.length - 1; i >= 0; i--) {
-    const n = kgSim.nodes[i];
-    const dx = p.x - n.x, dy = p.y - n.y;
-    if (dx * dx + dy * dy < (n.r + 6) ** 2) return n;
-  }
-  return null;
-}
-
-function roundRectPath(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.arcTo(x + w, y, x + w, y + h, r);
-  c.arcTo(x + w, y + h, x, y + h, r);
-  c.arcTo(x, y + h, x, y, r);
-  c.arcTo(x, y, x + w, y, r);
-  c.closePath();
-}
-
-function kgDraw() {
-  const { ctx, canvas } = kgSim;
-  const { nodes, edges } = kgSim;
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#FBFBFC';
-  ctx.fillRect(0, 0, W, H);
-
-  // focus rings centered on the hub
-  ctx.strokeStyle = 'rgba(24,95,165,.10)';
-  ctx.lineWidth = 1;
-  for (const r of [96, 128]) {
-    ctx.beginPath(); ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2); ctx.stroke();
-  }
-
-  // edges
-  ctx.strokeStyle = 'rgba(29,78,216,.30)';
-  ctx.lineWidth = 1.4;
-  for (const [a, b] of edges) {
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-  }
-
-  const colors = {
-    paper: '#1D4ED8', author: '#7C3AED', journal: '#0F766E',
-    year: '#D97706', citation: '#15803D', source: '#475569',
-  };
-
-  for (const n of nodes) {
-    if (n.type === 'paper') {
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(29,78,216,.16)'; ctx.fill();
-    }
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-    ctx.fillStyle = colors[n.type];
-    ctx.fill();
-    if (n.type === 'paper') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
-
-    // pill label below the node for legibility
-    const label = n.label.length > 26 ? n.label.slice(0, 24) + '…' : n.label;
-    ctx.font = (n.type === 'paper' ? '700 12px' : '600 11px') + ' -apple-system, "Segoe UI", sans-serif';
-    const tw = ctx.measureText(label).width;
-    const pillW = tw + 12, pillH = n.type === 'paper' ? 18 : 16;
-    const px = n.x - pillW / 2, py = n.y + n.r + 8;
-    ctx.fillStyle = 'rgba(255,255,255,.95)';
-    ctx.strokeStyle = 'rgba(0,0,0,.10)';
-    ctx.lineWidth = 1;
-    roundRectPath(ctx, px, py, pillW, pillH, 8);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, n.x, py + pillH / 2 + 0.5);
-  }
-  ctx.textBaseline = 'alphabetic';
-}
 </script>
+
 </body>
 </html>

@@ -1,7 +1,9 @@
 import hashlib
 import json
 import os
+import re
 import sqlite3
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -76,31 +78,47 @@ META_PHRASES = [
 ]
 
 
+RATE_LIMIT_MAX_RETRIES = 4
+
+
+def _rate_limit_wait(error_msg: str) -> float:
+    """Extract the suggested wait time (seconds) from a Groq 429 message, if present."""
+    match = re.search(r"try again in ([\d.]+)s", error_msg)
+    if match:
+        return float(match.group(1)) + 1.0
+    return 20.0
+
+
 def _ask_groq(messages: list) -> str:
     from groq import Groq
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise Exception("GROQ_API_KEY not set in .env")
     client = Groq(api_key=api_key)
-    try:
+
+    model = GROQ_MODEL
+    for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 1):
         try:
             response = client.chat.completions.create(
-                model=GROQ_MODEL,
+                model=model,
                 messages=messages,
                 temperature=0.3,
             )
+            return response.choices[0].message.content
         except Exception as e:
-            if "model_not_found" in str(e) or "does not exist" in str(e):
-                response = client.chat.completions.create(
-                    model=GROQ_FALLBACK_MODEL,
-                    messages=messages,
-                    temperature=0.3,
-                )
-            else:
-                raise
-        return response.choices[0].message.content
-    except Exception as e:
-        raise Exception(f"Groq error: {str(e)}")
+            error_str = str(e)
+            if "model_not_found" in error_str or "does not exist" in error_str:
+                model = GROQ_FALLBACK_MODEL
+                continue
+            # Rate limit (429): wait the suggested time and retry on the same model
+            if "rate_limit" in error_str.lower() or "429" in error_str:
+                if attempt == RATE_LIMIT_MAX_RETRIES:
+                    raise Exception(f"Groq error: {error_str}")
+                wait = _rate_limit_wait(error_str)
+                print(f"  (rate limited, waiting {wait:.1f}s... attempt {attempt}/{RATE_LIMIT_MAX_RETRIES})")
+                time.sleep(wait)
+                continue
+            raise Exception(f"Groq error: {error_str}")
 
 
 def _is_template_echo(value: str) -> bool:
@@ -283,3 +301,51 @@ Answer:"""
             return _ask_ollama(prompt, json_mode=False).strip()
     except Exception as e:
         raise Exception(f"Local LLM Error - {str(e)}")
+
+
+def stream_summarize_paper(text: str):
+    """Streaming variant of summarize_paper.
+
+    Yields {"type": "section_done", "section": ..., "content": ...} as each of the
+    5 sections finishes (they still run in parallel), then a final
+    {"type": "done", "result": {...}} event with the complete summary payload.
+    Yields {"type": "error", "detail": ...} instead if every section failed.
+    Mirrors summarize_paper: cache first, map-reduce for long papers.
+    """
+    cached = _cache_get(text)
+    if cached:
+        result = dict(cached)
+        result["full_text"] = text
+        result["cached"] = True
+        yield {"type": "done", "result": result}
+        return
+
+    if len(text) > SINGLE_PASS_CHAR_LIMIT:
+        import map_reduce
+        condensed_text = map_reduce.get_condensed_text(text)
+    else:
+        condensed_text = text[:SINGLE_PASS_CHAR_LIMIT]
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = {}
+    errors = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_ask_section, s, condensed_text): s for s in _SECTION_ORDER}
+        for fut in as_completed(futures):
+            section = futures[fut]
+            try:
+                value = fut.result()
+            except Exception as e:
+                value = ""
+                errors[section] = str(e)
+            results[section] = value
+            yield {"type": "section_done", "section": section, "content": value}
+
+    # All sections failed → surface the error (mirrors summarize_paper raising)
+    if errors and len(errors) == len(_SECTION_ORDER):
+        raise Exception(f"Summarization failed: {errors.get('summary', next(iter(errors.values())))}")
+
+    result = {k: (v if v else "Data not provided by the model.") for k, v in results.items()}
+    result["full_text"] = text
+    _cache_put(text, result)
+    yield {"type": "done", "result": result}
