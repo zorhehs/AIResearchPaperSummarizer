@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Research Paper Summarizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Crect width='8' height='8' fill='%234787c3'/%3E%3Crect x='2' y='1' width='4' height='6' fill='white'/%3E%3Crect x='3' y='2' width='2' height='1' fill='%234787c3'/%3E%3Crect x='3' y='4' width='2' height='1' fill='%234787c3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.46.0/tabler-icons.min.css">
+<style>
+  /* ── reset & base ─────────────────────────── */
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, "Segoe UI", sans-serif;
+    margin: 0; color: #1c1917;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body.dark { background: #0d1f36; }
+
+  /* ── sky / hero (keep professional blue background, remove decorative trees/clouds) ──────── */
+  .sky {
+    position: relative; min-height: 100vh; overflow: hidden;
+    background: linear-gradient(180deg, #3f7fbd 0%, #4f92cb 45%, #5fa0d6 100%);
+    padding-bottom: 0;
+  }
+  .sky-night {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, #0d1f36 0%, #142e4d 45%, #1b3c62 100%);
+    opacity: 0; transition: opacity .9s ease;
+  }
+  body.dark .sky-night { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .hero h1,.app-card,.result-card,button.scroll-cue { animation: none !important; }
+  }
+  .hero { position: relative; text-align: center; padding: 54px 24px 0; max-width: 1000px; margin: 0 auto; }
+  .hero h1 {
+    color: #fff; font-size: clamp(2.2rem, 4.2vw, 3.5rem); font-weight: 700;
+    letter-spacing: -0.035em; line-height: 1.05; margin: 0 0 18px;
+  }
+  .hero h1 .dim { color: rgba(255,255,255,.54); display: block; }
+  .marquee {
+    position: relative; width: 100vw; margin-left: calc(50% - 50vw); margin-bottom: 32px;
+    overflow: hidden; padding: 9px 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
+    border-top: 1px solid rgba(255,255,255,.2); border-bottom: 1px solid rgba(255,255,255,.2);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .marquee-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  .marquee-item {
+    white-space: nowrap; color: rgba(255,255,255,.72);
+    font-family: "Space Grotesk", sans-serif; font-size: clamp(.68rem,.9vw,.8rem);
+    font-weight: 500; text-transform: uppercase; letter-spacing: .08em; padding-right: 56px;
+  }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track { animation: none; width: 100%; justify-content: center; }
+    .marquee-item { white-space: normal; padding: 0 28px; text-align: center; }
+    .marquee-item[aria-hidden="true"] { display: none; }
+  }
+  button.scroll-cue {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+    margin: 2px auto 36px; padding: 4px 16px;
+    background: none; color: rgba(255,255,255,.85); font-size: 30px;
+    border: none; cursor: pointer;
+    animation: bob 1.8s ease-in-out infinite;
+  }
+  button.scroll-cue:hover:not(:disabled) { background: rgba(255,255,255,.12); color: #fff; }
+  .scroll-cue .cue-label {
+    font-size: 9px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase;
+    color: rgba(255,255,255,.55); font-family: "Space Grotesk", sans-serif;
+  }
+  button.scroll-cue:hover .cue-label { color: rgba(255,255,255,.8); }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(9px); } }
+  @media (max-width: 860px) { .hero { padding-top: 52px; } }
+
+  /* ── stage & card ───────────────────────── */
+  .stage { position: relative; max-width: 1120px; margin: 48px auto 0; padding: 0 24px; }
+
+  .app-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 4px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06), 0 24px 64px rgba(0,0,0,.06);
+    overflow: hidden;
+    animation: cardRise .55s cubic-bezier(.16,1,.3,1) both;
+    animation-delay: .25s;
+  }
+  @keyframes cardRise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  /* ── card header ────────────────────── */
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px 13px;
+    background: #fafafa;
+    border-bottom: 1px solid #e9eaeb;
+  }
+  .card-head-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600; color: #4b5563; letter-spacing: -0.005em;
+  }
+  .card-head-title i { font-size: 15px; color: #b0b8c1; }
+
+  /* ── usage chip ───────────────────── */
+  .usage-chip {
+    font-size: 11px; font-weight: 500; color: #6b7280;
+    background: #f3f4f6; border: 1px solid #e5e7eb;
+    border-radius: 6px; padding: 4px 10px; display: none;
+  }
+  .usage-chip.warn { background: #fef3ea; color: #b45309; border-color: #fcd9a8; }
+
+  /* ── single-column workflow ────────── */
+  .workflow { max-width: 860px; margin: 0 auto; padding: 10px 6px 14px; }
+  .step-label {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 11px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .09em; margin: 0 0 12px;
+  }
+  .step-num {
+    width: 21px; height: 21px; border-radius: 50%; flex-shrink: 0;
+    background: #1c1917; color: #fff; font-size: 10.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    letter-spacing: 0;
+  }
+  .step-line { flex: 1; height: 1px; background: #e9eaeb; }
+  .panel-box {
+    background: #fafafa;
+    border: 1px solid #e9eaeb; border-radius: 16px;
+  }
+  .input-panel { padding: 24px 26px 26px; }
+  #results-area { min-height: 120px; }
+
+  /* ── segmented mode switch ──────────── */
+  .mode-switch {
+    display: flex; background: #efefef; border-radius: 10px; padding: 4px; gap: 3px; margin-bottom: 20px;
+  }
+  .tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 9px 10px; font-size: 12.5px; border-radius: 7px;
+    cursor: pointer; color: #9ca3af; font-weight: 500; user-select: none;
+    transition: background .14s, color .14s, box-shadow .14s;
+  }
+  .tab i { font-size: 14px; }
+  .tab.active {
+    background: #fff; color: #1c1917; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.06);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── drop zone ────────────────────── */
+  .dropzone {
+    background: #fff;
+    border: 2px dashed #d5dae0;
+    border-radius: 14px; padding: 46px 24px 40px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; margin-bottom: 16px; cursor: pointer; text-align: center;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: #5a8fc4; background: #f7fafd;
+    box-shadow: 0 4px 18px rgba(74,127,181,.10);
+  }
+  .dropzone i { font-size: 42px; color: #b0b8c1; transition: color .15s, transform .15s; margin-bottom: 4px; }
+  .dropzone:hover i, .dropzone.dragover i { color: #4a7fb5; transform: translateY(-3px); }
+  .dropzone p { margin: 0; font-size: 15px; color: #1c1917; font-weight: 600; letter-spacing: -0.01em; }
+  .dropzone .hint { font-size: 12px; color: #9ca3af; font-weight: 400; margin-top: -2px; }
+  .dropzone .browse-link {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    background: #1c1917; color: #fff; padding: 9px 18px; border-radius: 9px;
+    font-size: 12.5px; font-weight: 600; text-decoration: none;
+    transition: background .14s, transform .14s;
+  }
+  .dropzone:hover .browse-link { background: #292524; transform: translateY(-1px); }
+
+  /* ── file card (after selection) ───────── */
+  .file-card {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .file-card-icon {
+    width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+    background: #3b6ea5; display: flex; align-items: center; justify-content: center;
+  }
+  .file-card-icon i { font-size: 15px; color: #fff; }
+  .file-card-info { flex: 1; min-width: 0; }
+  .file-card-name { font-size: 12.5px; font-weight: 600; color: #1c1917; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-card-size { font-size: 10.5px; color: #9ca3af; margin-top: 1px; }
+  .file-card-remove {
+    background: none; border: none; color: #b0b8c1; font-size: 15px;
+    cursor: pointer; padding: 4px; border-radius: 6px;
+    display: flex; align-items: center; transition: color .13s, background .13s;
+  }
+  .file-card-remove:hover { color: #b04040; background: #faeaea; }
+
+  /* ── buttons & inputs ──────────────── */
+  button {
+    background: #1c1917; color: #fff; border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .13s, box-shadow .13s;
+    letter-spacing: -0.01em; font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: #292524; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+  button.secondary {
+    background: #fff; color: #374151;
+    border: 1px solid #e5e7eb; box-shadow: none;
+  }
+  button.secondary:hover:not(:disabled) { background: #f5f5f5; border-color: #d1d5db; box-shadow: none; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  input[type="text"] {
+    width: 100%; padding: 10px 13px; border: 1px solid #e5e7eb; border-radius: 9px;
+    background: rgba(255,255,255,.8); font-size: 13px; margin-bottom: 12px;
+    font-family: inherit; color: #1c1917;
+    transition: border-color .13s, box-shadow .13s; box-sizing: border-box;
+  }
+  input[type="text"]::placeholder { color: #b5b0a8; }
+  input[type="text"]:focus { outline: none; border-color: #7aadd8; box-shadow: 0 0 0 3px rgba(74,127,181,.14); background: #fff; }
+  .filename { display: none; }
+
+  /* ── results area ──────────────────── */
+  .paper-title { font-size: 1.18rem; font-weight: 700; color: #1c1917; margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.3; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 18px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; color: #6b7280; background: #f3f4f6;
+    border: 1px solid #e5e7eb; padding: 3px 9px; border-radius: 6px; font-weight: 500;
+  }
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+  .pill.good { background: #e6f4de; color: #3d7a2e; }
+  .pill.bad  { background: #fdeee8; color: #b04040; }
+  .pill.neutral { background: #f3f4f6; color: #6b7280; }
+
+  /* ── stats block (premium style matching reference) ── */
+  .stats {
+    background: #f5f5f5; border: 1px solid #e5e7eb; border-radius: 14px;
+    padding: 20px 22px 4px; margin: 0 0 20px;
+  }
+  .stats-label { font-size: 11.5px; color: #9ca3af; font-weight: 500; margin: 0 0 6px; letter-spacing: 0; }
+  .stats-big { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .stats-big .num { font-size: 52px; font-weight: 700; letter-spacing: -0.045em; color: #1c1917; line-height: 1; }
+  .statbar {
+    height: 26px; background: #e5e7eb; border-radius: 7px;
+    overflow: hidden; margin: 0 0 0;
+  }
+  .statbar .fill {
+    height: 100%; border-radius: 7px; background: #7cc86a;
+    transition: width .75s cubic-bezier(.16,1,.3,1);
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-top: 1px solid #e9eaeb; font-size: 13px; color: #6b7280;
+  }
+  .stat-row .val { font-weight: 600; color: #1c1917; display: inline-flex; align-items: center; gap: 8px; }
+
+  /* ── section cards (one-by-one, full width) ── */
+  .results { display: flex; flex-direction: column; gap: 12px; }
+  .result-card {
+    background: #fff; border: 1px solid #e9eaeb; border-radius: 14px;
+    padding: 18px 22px 20px; transition: border-color .14s, box-shadow .14s;
+  }
+  .result-card:hover { border-color: #d1d5db; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+  .result-card.live-in { animation: cardLive .5s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes cardLive { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .result-card-header {
+    font-size: 13.5px; font-weight: 700; margin: 0 0 12px;
+    display: flex; align-items: center; gap: 10px;
+    color: #1c1917; letter-spacing: -0.01em;
+  }
+  .result-card-header .rc-icon {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+    background: #eef3fb; color: #3b6ea5; font-size: 15px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .result-card-header .rc-title { flex: 1; }
+  .result-card-header .copy-btn { cursor: pointer; color: #d1d5db; font-size: 14px; transition: color .13s; }
+  .result-card-header .copy-btn:hover { color: #3b6ea5; }
+  .result-card-body { font-size: 14px; color: #374151; line-height: 1.78; }
+  .result-card-body ul, .result-card-body ol { margin: 4px 0; padding-left: 20px; }
+  .result-card-body li { margin-bottom: 8px; }
+  .result-card-body li::marker { color: #3b6ea5; }
+  .result-card-body li:last-child { margin-bottom: 0; }
+  .sec-paragraph { margin: 0 0 8px; }
+  .sec-paragraph:last-child { margin-bottom: 0; }
+
+  .action-row { display: flex; gap: 7px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+  .action-row .spacer { flex: 1; }
+
+  /* ── chat ────────────────────────── */
+  .chat-section { margin-top: 24px; border-top: 1px solid #e9eaeb; padding-top: 20px; }
+  .chat-heading { font-size: 11px; font-weight: 600; color: #9ca3af; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .07em; }
+  .chat-bubble { border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 8px; line-height: 1.58; }
+  .chat-bubble.user    { background: #eef3fb; color: #1e3858; max-width: 72%; }
+  .chat-bubble.assistant { border: 1px solid #e9eaeb; background: #fff; max-width: 84%; margin-left: auto; color: #374151; }
+  .chat-input-row {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+    padding: 10px 14px; margin-top: 12px;
+    transition: border-color .13s, box-shadow .13s;
+  }
+  .chat-input-row:focus-within { border-color: #7aadd8; box-shadow: 0 0 0 3px rgba(74,127,181,.12); }
+  .chat-input-row input { border: none; padding: 0; margin: 0; font-size: 13px; flex: 1; font-family: inherit; background: transparent; color: #1c1917; }
+  .chat-input-row input::placeholder { color: #b5b0a8; }
+  .chat-input-row input:focus { outline: none; }
+  .chat-input-row i { color: #b0b8c1; font-size: 15px; cursor: pointer; transition: color .13s; }
+  .chat-input-row i:hover { color: #3b6ea5; }
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .chip {
+    font-size: 11.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px;
+    background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; cursor: pointer;
+    transition: background .13s, border-color .13s;
+  }
+  .chip:hover { background: #e9eaeb; border-color: #d1d5db; }
+  .chat-typing { display: inline-flex; gap: 4px; padding: 10px 13px; }
+  .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: #d1d5db; animation: blink 1.2s infinite; }
+  .chat-typing span:nth-child(2) { animation-delay: .2s; }
+  .chat-typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+  /* ── live progress panel ───────────── */
+  .progress-panel {
+    background: #fafafa; border: 1px solid #e9eaeb; border-radius: 14px;
+    padding: 20px 22px 18px; margin-bottom: 18px;
+  }
+  .progress-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .progress-title { font-size: 14.5px; font-weight: 700; color: #1c1917; letter-spacing: -0.01em; }
+  .progress-title .dots::after { content: ''; animation: dots 1.4s steps(1, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+  .progress-meta { font-size: 12px; color: #9ca3af; display: flex; gap: 14px; white-space: nowrap; }
+  .progress-meta #pg-count { font-weight: 600; color: #3b6ea5; }
+  .pg-bar { height: 8px; background: #e9eaeb; border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .pg-bar .fill {
+    height: 100%; width: 0%; border-radius: 6px;
+    background: linear-gradient(90deg, #4a7fb5, #7cc86a);
+    transition: width .5s cubic-bezier(.16,1,.3,1);
+  }
+  .pstage-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pstage {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 500; color: #b0b8c1;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 999px; padding: 6px 13px;
+    transition: color .25s, border-color .25s, background .25s;
+  }
+  .pstage i { font-size: 13px; }
+  .pstage.active { color: #1e3858; border-color: #b8d0e8; background: #eef3fb; }
+  .pstage.active i { color: #3b6ea5; animation: spin 1.2s linear infinite; }
+  .pstage.done { color: #4d9441; border-color: #cfe6c6; background: #f2f9ef; }
+  .pstage.done i { animation: none; }
+  .load-sections {
+    margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px;
+  }
+  .load-section { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #b0b8c1; padding: 5px 0; transition: color .3s; }
+  .load-section i { font-size: 14px; }
+  .load-section.done { color: #4d9441; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-box { background: #fdeee8; color: #b04040; padding: 12px 16px; border-radius: 10px; margin: 12px 0; font-size: 13px; border: 1px solid #f5c8b8; }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 180px; gap: 10px; text-align: center; color: #b0b8c1; font-size: 13px; padding: 32px 24px;
+    background: #fafafa; border: 1px dashed #e5e7eb; border-radius: 14px;
+  }
+  .empty-icon { font-size: 34px; color: #d4d7dc; margin-bottom: 4px; }
+
+  /* ── card footer ──────────────────── */
+  .card-footer {
+    border-top: 1px solid #e9eaeb; padding: 12px 24px 14px;
+    background: #fafafa;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .card-footer-brand { display: flex; align-items: center; gap: 5px; color: #b0b8c1; font-size: 11px; }
+  .card-footer-brand i { font-size: 12px; }
+  .recent-wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .recent-label { font-size: 11px; color: #b8bec6; font-weight: 500; white-space: nowrap; }
+  .recent-item {
+    font-size: 11px; color: #6b7280; background: #f3f4f6;
+    border-radius: 6px; padding: 3px 9px;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: background .13s, color .13s;
+  }
+  .recent-item:hover { background: #e4edf8; color: #3b6ea5; }
+  .recent-item i { font-size: 10px; color: #b8bec6; }
+
+  /* ── animations ────────────────────── */
+  .result-card { animation: cardRise .42s cubic-bezier(.16,1,.3,1) backwards; }
+  .result-card:nth-child(2) { animation-delay: .05s; }
+  .result-card:nth-child(3) { animation-delay: .1s; }
+  .result-card:nth-child(4) { animation-delay: .15s; }
+  .result-card:nth-child(5) { animation-delay: .2s; }
+
+  /* ── responsive ──────────────────── */
+  @media (max-width: 860px) {
+    .stage { padding: 0 14px; margin-top: 38px; }
+    .app-card { border-radius: 14px; }
+    .card-head { padding: 12px 16px 11px; }
+    .workflow { padding: 8px 2px 10px; }
+    .input-panel { padding: 18px 16px 20px; }
+    .dropzone { padding: 34px 16px 30px; }
+    .dropzone i { font-size: 34px; }
+    .result-card { padding: 16px 16px 18px; }
+    .progress-panel { padding: 16px 16px 14px; }
+    .load-sections { grid-template-columns: 1fr; }
+    .card-footer { padding: 11px 16px 13px; }
+  }
+  /* ---------- animations ---------- */
+  .hero h1, .app-card { animation: rise .7s ease-out backwards; }
+  .features { animation-delay: .2s; }
+  .app-card { animation-delay: .3s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  .result-card { animation: rise .45s ease-out backwards; }
+  .result-card:nth-child(2) { animation-delay: .05s; }
+  .result-card:nth-child(3) { animation-delay: .1s; }
+  .result-card:nth-child(4) { animation-delay: .15s; }
+  .result-card:nth-child(5) { animation-delay: .2s; }
+
+  /* ── theme toggle & stars ────────────── */
+  button.theme-toggle {
+    position: fixed; top: 20px; right: 20px; z-index: 50;
+    background: none; color: #fff; padding: 6px; width: 38px; height: 38px;
+    border: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 6px rgba(0,0,0,.35);
+    transition: transform .15s ease, opacity .15s ease;
+  }
+  button.theme-toggle:hover:not(:disabled) { transform: scale(1.15); opacity: .85; background: none; box-shadow: none; }
+  button.theme-toggle i {
+    font-size: 22px; line-height: 1;
+    display: block;
+  }
+  .stars { display: none; }
+
+  /* ── dark mode ────────────────────── */
+  body.dark .hero h1 .dim { color: rgba(255,255,255,.4); }
+  body.dark .stars {
+    display: block; position: absolute; top: 0; left: 0; right: 0;
+    height: 460px; overflow: hidden; pointer-events: none;
+  }
+  body.dark .stars::before {
+    animation: twinkle 3.2s ease-in-out infinite alternate;
+    content: ''; position: absolute; width: 3px; height: 3px; border-radius: 1px; background: transparent;
+    box-shadow: 5vw 8vh #cfe0f2,12vw 20vh #9db8d6,22vw 6vh #cfe0f2,30vw 16vh #8fa9c9,
+      40vw 10vh #cfe0f2,52vw 5vh #9db8d6,60vw 18vh #cfe0f2,70vw 9vh #8fa9c9,
+      80vw 14vh #cfe0f2,90vw 7vh #9db8d6,8vw 34vh #8fa9c9,45vw 28vh #9db8d6,88vw 30vh #cfe0f2;
+  }
+  @keyframes twinkle { from { opacity: .6; } to { opacity: 1; } }
+
+  body.dark .app-card { background: #1c1917; border-color: #2c2822; box-shadow: 0 8px 24px rgba(0,0,0,.4), 0 24px 64px rgba(0,0,0,.4); }
+  body.dark .card-head { background: #161412; border-color: #2c2822; }
+  body.dark .card-head-title { color: #4b5563; }
+  body.dark .card-head-title i { color: #3d3830; }
+  body.dark .usage-chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
+  body.dark .usage-chip.warn { background: #3d2a1e; color: #d48a40; border-color: #5a3a20; }
+  body.dark .step-label { color: #4b5563; }
+  body.dark .step-num { background: #e7e5e4; color: #1c1917; }
+  body.dark .step-line { background: #2c2822; }
+  body.dark .panel-box { background: #161412; border-color: #2c2822; }
+  body.dark .mode-switch { background: #28231e; }
+  body.dark .tab { color: #4b5563; }
+  body.dark .tab.active { background: #332d28; color: #e7e5e4; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  body.dark .dropzone { background: rgba(255,255,255,.03); border-color: #3d3830; }
+  body.dark .dropzone:hover, body.dark .dropzone.dragover { background: rgba(255,255,255,.06); border-color: #5a7fa8; }
+  body.dark .dropzone p { color: #e7e5e4; }
+  body.dark .dropzone .hint { color: #4b5563; }
+  body.dark .dropzone .browse-link { background: #e7e5e4; color: #1c1917; }
+  body.dark .dropzone:hover .browse-link { background: #fff; }
+  body.dark .file-card { background: #28231e; border-color: #3d3830; box-shadow: none; }
+  body.dark .file-card-name { color: #e7e5e4; }
+  body.dark .file-card-size { color: #4b5563; }
+  body.dark .file-card-remove { color: #3d3830; }
+  body.dark .file-card-remove:hover { color: #e07070; background: #3a1818; }
+  body.dark button { background: #e7e5e4; color: #1c1917; }
+  body.dark button:hover:not(:disabled) { background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+  body.dark button.secondary { background: #28231e; color: #9ca3af; border-color: #3d3830; box-shadow: none; }
+  body.dark button.secondary:hover:not(:disabled) { background: #332d28; box-shadow: none; }
+  body.dark button.theme-toggle { background: none; color: #fff; border: none; box-shadow: none; }
+  body.dark button.theme-toggle:hover:not(:disabled) { background: none; box-shadow: none; opacity: .85; }
+  body.dark button.scroll-cue { background: none; color: rgba(255,255,255,.85); box-shadow: none; }
+  body.dark button.scroll-cue:hover:not(:disabled) { background: rgba(255,255,255,.12); }
+  body.dark input[type="text"] { background: #1e1a17; border-color: #3d3830; color: #e7e5e4; }
+  body.dark input[type="text"]::placeholder { color: #3d3830; }
+  body.dark .paper-title { color: #e7e5e4; }
+  body.dark .tag { background: #28231e; border-color: #3d3830; color: #6b7280; }
+  body.dark .stats { background: #161412; border-color: #2c2822; }
+  body.dark .stats-label { color: #4b5563; }
+  body.dark .stats-big .num { color: #e7e5e4; }
+  body.dark .statbar { background: #28231e; }
+  body.dark .statbar .fill { background: #5a9448; }
+  body.dark .stat-row { border-color: #2c2822; color: #6b7280; }
+  body.dark .stat-row .val { color: #c8c4be; }
+  body.dark .result-card { background: #1e1a17; border-color: #2c2822; }
+  body.dark .result-card:hover { border-color: #3d3830; box-shadow: none; }
+  body.dark .result-card-header { color: #e7e5e4; }
+  body.dark .result-card-header .rc-icon { background: #1e3048; color: #6b9fd4; }
+  body.dark .result-card-header .copy-btn { color: #3d3830; }
+  body.dark .result-card-header .copy-btn:hover { color: #6b9fd4; }
+  body.dark .result-card-body { color: #9ca3af; }
+  body.dark .result-card-body li::marker { color: #6b9fd4; }
+  body.dark .chat-section { border-color: #2c2822; }
+  body.dark .chat-heading { color: #3d3830; }
+  body.dark .chat-bubble.user { background: #1e3048; color: #a8c8e8; }
+  body.dark .chat-bubble.assistant { background: #1e1a17; border-color: #2c2822; color: #9ca3af; }
+  body.dark .chat-input-row { background: #1e1a17; border-color: #3d3830; }
+  body.dark .chat-input-row input { color: #e7e5e4; }
+  body.dark .chat-input-row input::placeholder { color: #3d3830; }
+  body.dark .chat-input-row i { color: #3d3830; }
+  body.dark .chat-input-row i:hover { color: #6b9fd4; }
+  body.dark .chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
+  body.dark .chip:hover { background: #332d28; }
+  body.dark .chat-typing span { background: #3d3830; }
+  body.dark .progress-panel { background: #161412; border-color: #2c2822; }
+  body.dark .progress-title { color: #e7e5e4; }
+  body.dark .progress-meta { color: #4b5563; }
+  body.dark .progress-meta #pg-count { color: #6b9fd4; }
+  body.dark .pg-bar { background: #28231e; }
+  body.dark .pstage { background: #1c1917; border-color: #3d3830; color: #4b5563; }
+  body.dark .pstage.active { background: #1e3048; border-color: #2c4a6e; color: #8fb8e0; }
+  body.dark .pstage.active i { color: #6b9fd4; }
+  body.dark .pstage.done { background: #1a3018; border-color: #2c4a28; color: #5a9448; }
+  body.dark .load-section { color: #4b5563; }
+  body.dark .load-section.done { color: #5a9448; }
+  body.dark .error-box { background: #3a1818; color: #e07070; border-color: #5a2a2a; }
+  body.dark .empty-state { color: #3d3830; background: #161412; border-color: #2c2822; }
+  body.dark .empty-icon { color: #2c2822; }
+  body.dark .card-footer { background: #161412; border-color: #2c2822; }
+  body.dark .card-footer-brand { color: #3d3830; }
+  body.dark .recent-label { color: #3d3830; }
+  body.dark .recent-item { background: #28231e; color: #4b5563; }
+  body.dark .recent-item:hover { background: #1e3048; color: #6b9fd4; }
+  body.dark .pill.good { background: #1a3018; color: #5a9448; }
+  body.dark .pill.bad  { background: #3a1818; color: #e07070; }
+  body.dark .pill.neutral { background: #28231e; color: #78716c; }
+
+  /* ── credit footer (transparent, blends into the sky) ── */
+  .scene-footer {
+    position: relative;
+    z-index: 1;
+    margin-top: 56px;
+    padding: 20px 20px 26px;
+    text-align: center;
+  }
+  .scene-credit {
+    text-align: center;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: rgba(255,255,255,.82);
+    letter-spacing: -0.01em;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .scene-credit strong { font-weight: 600; color: #fff; }
+  .scene-credit a {
+    color: #fff; font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: rgba(255,255,255,.42);
+    transition: text-decoration-color .15s;
+  }
+  .scene-credit a:hover { text-decoration-color: rgba(255,255,255,.9); }
+  @media (max-width: 860px) {
+    .scene-footer { margin-top: 32px; padding: 12px 16px 14px; }
+    .scene-credit { font-size: 10.5px; }
+  }
+
+</style>
+</head>
+<body>
+
+<div class="sky">
+  <div class="sky-night" aria-hidden="true"></div>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
+  <div class="stars" aria-hidden="true"></div>
+
+  <!-- hero -->
+  <div class="hero">
+    <h1>All the research answers
+      <span class="dim">your paper holds</span></h1>
+    <div class="marquee" aria-label="Turn lengthy research papers into clear useful insights in just a few seconds.">
+      <div class="marquee-track">
+        <span class="marquee-item">Turn lengthy research papers into clear useful insights in just a few seconds</span>
+        <span class="marquee-item" aria-hidden="true">Turn lengthy research papers into clear useful insights in just a few seconds</span>
+      </div>
+    </div>
+    <button class="scroll-cue" onclick="document.querySelector('.app-card').scrollIntoView({ behavior: 'smooth' })" aria-label="Scroll down to the summarizer" title="Scroll down">
+      <span class="cue-label">scroll down</span>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+  </div>
+
+  <!-- big white card -->
+  <div class="stage">
+    <div class="app-card">
+
+      <!-- card header -->
+      <div class="card-head">
+        <div class="card-head-title">
+          <i class="ti ti-file-description"></i>
+          Paper Summarizer
+        </div>
+        <span class="usage-chip" id="usage-chip"></span>
+      </div>
+
+      <!-- single-column workflow -->
+      <div class="workflow">
+        <div class="step-label"><span class="step-num">1</span>Add your paper<span class="step-line"></span></div>
+        <div class="input-panel panel-box">
+          <div class="mode-switch">
+            <div class="tab active" onclick="switchTab('pdf')"><i class="ti ti-file-upload"></i>Upload PDF</div>
+            <div class="tab" onclick="switchTab('doi')"><i class="ti ti-link"></i>Enter DOI</div>
+          </div>
+
+          <div id="tab-pdf" class="tab-content active">
+            <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
+              <i class="ti ti-cloud-upload"></i>
+              <p>Drag &amp; drop your paper here</p>
+              <p class="hint">PDF only &middot; up to 200 MB &middot; summary in under a minute</p>
+              <span class="browse-link"><i class="ti ti-folder-open"></i>Choose PDF</span>
+            </div>
+            <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
+            <div id="filename" class="filename"></div>
+            <div id="file-card-wrap"></div>
+            <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled style="width:100%;justify-content:center;padding:12px;">
+              <i class="ti ti-sparkles"></i>Summarize paper
+            </button>
+          </div>
+
+          <div id="tab-doi" class="tab-content">
+            <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
+            <div style="display:flex; gap:8px;">
+              <button onclick="summarizeDoi()" style="flex:1;justify-content:center;padding:12px;">
+                <i class="ti ti-sparkles"></i>Summarize paper
+              </button>
+              <button class="secondary" onclick="fillExampleDoi()" title="Fill with an example DOI">
+                <i class="ti ti-wand"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-label" style="margin-top:30px;"><span class="step-num">2</span>Your summary<span class="step-line"></span></div>
+        <div id="results-area">
+          <div class="empty-state">
+            <i class="ti ti-file-description empty-icon"></i>
+            <span>Upload a PDF or paste a DOI above — your structured summary will appear here, section by section</span>
+          </div>
+        </div>
+      </div><!-- /workflow -->
+
+      <div class="card-footer">
+        <div class="card-footer-brand">
+          <i class="ti ti-cpu"></i>
+          <span>FastAPI &middot; gpt-oss-120b via Groq</span>
+        </div>
+        <div class="recent-wrap">
+          <span class="recent-label">Recent:</span>
+          <span id="recent-list"><span style="color:#b8bec6;font-size:11px">None yet</span></span>
+        </div>
+      </div>
+    </div><!-- /app-card -->
+  </div><!-- /stage -->
+
+  <!-- credit footer (inside .sky so it blends with the day/night gradient) -->
+  <div class="scene-footer">
+    <div class="scene-credit">
+      Built for <strong>NUST Research Directorate</strong>
+      &nbsp;&middot;&nbsp;
+      by
+      <a href="https://github.com/zorhehs" target="_blank" rel="noopener">@zorhehs</a>
+      &amp;
+      <a href="https://github.com/subhaniq" target="_blank" rel="noopener">@subhaniq</a>
+    </div>
+  </div>
+</div><!-- /sky -->
+
+<script>
+let selectedFile = null;
+let currentPaperText = "";
+let chatHistory = [];
+let recentPapers = [];
+let loadTimer = null;
+
+const SECTION_META = {
+  summary:       { icon: 'ti-file-text', label: 'Summary' },
+  methodology:   { icon: 'ti-flask',     label: 'Methodology' },
+  research_gaps: { icon: 'ti-puzzle',    label: 'Research gaps' },
+  findings:      { icon: 'ti-bulb',      label: 'Findings' },
+  future_work:   { icon: 'ti-road',      label: 'Future work' },
+  key_stats:     { icon: 'ti-chart-bar', label: 'Key statistics' },
+};
+// display order for the final results (streaming may complete them in any order)
+const SECTION_DISPLAY_ORDER = ['summary', 'findings', 'key_stats', 'methodology', 'future_work', 'research_gaps'];
+let streamStats = { done: 0, total: 6 };
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab:nth-child(${tab === 'pdf' ? 1 : 2})`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function onFileSelected() {
+  const input = document.getElementById('file-input');
+  setFile(input.files[0]);
+}
+
+function setFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showError('Please choose a PDF file.');
+    return;
+  }
+  selectedFile = file;
+  const sizeKb = file.size < 1024 * 1024
+    ? (file.size / 1024).toFixed(0) + ' KB'
+    : (file.size / 1024 / 1024).toFixed(1) + ' MB';
+  document.getElementById('file-card-wrap').innerHTML = `
+    <div class="file-card">
+      <div class="file-card-icon"><i class="ti ti-file-type-pdf"></i></div>
+      <div class="file-card-info">
+        <div class="file-card-name">${escapeHtml(file.name)}</div>
+        <div class="file-card-size">${sizeKb}</div>
+      </div>
+      <button class="file-card-remove" type="button" onclick="clearFile()" title="Remove file">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`;
+  document.getElementById('dropzone').style.display = 'none';
+  document.getElementById('summarize-pdf-btn').disabled = false;
+}
+
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('file-card-wrap').innerHTML = '';
+  document.getElementById('dropzone').style.display = '';
+  document.getElementById('file-input').value = '';
+  document.getElementById('summarize-pdf-btn').disabled = true;
+}
+
+// Drag & drop
+window.addEventListener('DOMContentLoaded', () => {
+  const dz = document.getElementById('dropzone');
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.remove('dragover');
+  }));
+  dz.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+
+  // Enter key submits the DOI
+  document.getElementById('doi-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') summarizeDoi();
+  });
+
+  loadRecent();
+  applyTheme(localStorage.getItem('theme') || 'light');
+  refreshUsage();
+  fillMarquee();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fillMarquee);
+  window.addEventListener('resize', fillMarquee);
+  initParallax();
+  initScrollCueFade();
+});
+
+// Ensure the ticker has enough repeated copies to always cover the full viewport width
+function fillMarquee() {
+  const track = document.querySelector('.marquee-track');
+  if (!track || !track.children.length) return;
+  const item = track.children[0];
+  const w = item.offsetWidth || 1;
+  const needed = Math.max(2, Math.ceil((2 * window.innerWidth) / w));
+  const total = needed + (needed % 2); // even count keeps the -50% loop seamless
+  while (track.children.length < total) {
+    const clone = item.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    track.appendChild(clone);
+  }
+  // constant scroll speed (~28px/s) no matter how many copies were added
+  track.style.animationDuration = Math.round(track.scrollWidth / 2 / 28) + 's';
+}
+
+function showLoading() {
+  const t0 = Date.now();
+  streamStats = { done: 0, total: Object.keys(SECTION_META).length };
+  const rows = Object.keys(SECTION_META).map(k =>
+    `<div class="load-section" id="ls-${k}"><i class="ti ti-circle"></i><span>${SECTION_META[k].label}</span></div>`
+  ).join('');
+  document.getElementById('results-area').innerHTML = `
+    <div class="progress-panel">
+      <div class="progress-head">
+        <div class="progress-title" id="pg-title">Analyzing your paper<span class="dots"></span></div>
+        <div class="progress-meta">
+          <span id="pg-elapsed">0s elapsed</span>
+          <span id="pg-count">0 / ${streamStats.total} sections</span>
+        </div>
+      </div>
+      <div class="pg-bar"><div class="fill" id="pg-fill"></div></div>
+      <div class="pstage-row">
+        <span class="pstage active" id="pstage-read"><i class="ti ti-loader-2"></i>Reading paper</span>
+        <span class="pstage" id="pstage-write"><i class="ti ti-typewriter"></i>Writing summary</span>
+        <span class="pstage" id="pstage-done"><i class="ti ti-circle-check"></i>Done</span>
+      </div>
+      <div class="load-sections" id="load-sections" style="display:none">${rows}</div>
+    </div>
+    <div class="results" id="live-results"></div>`;
+  loadTimer = setInterval(() => {
+    const el = document.getElementById('pg-elapsed');
+    if (el) el.textContent = `${Math.round((Date.now() - t0) / 1000)}s elapsed`;
+  }, 1000);
+  // bring the progress panel into view so the user sees it start immediately
+  setTimeout(() => {
+    document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}
+
+function stageWriting() {
+  const read = document.getElementById('pstage-read');
+  if (read) {
+    read.classList.remove('active');
+    read.classList.add('done');
+    const i = read.querySelector('i');
+    if (i) i.className = 'ti ti-circle-check';
+  }
+  const write = document.getElementById('pstage-write');
+  if (write) write.classList.add('active');
+  const ls = document.getElementById('load-sections');
+  if (ls) ls.style.display = 'grid';
+  const title = document.getElementById('pg-title');
+  if (title) title.innerHTML = 'Writing your summary<span class="dots"></span>';
+}
+
+function stageDone() {
+  const write = document.getElementById('pstage-write');
+  if (write) {
+    write.classList.remove('active');
+    write.classList.add('done');
+    const i = write.querySelector('i');
+    if (i) i.className = 'ti ti-circle-check';
+  }
+  const done = document.getElementById('pstage-done');
+  if (done) {
+    done.classList.add('done');
+    const i = done.querySelector('i');
+    if (i) i.className = 'ti ti-circle-check';
+  }
+  const title = document.getElementById('pg-title');
+  if (title) title.textContent = 'Summary ready';
+}
+
+function markSectionDone(section, content) {
+  streamStats.done++;
+  const row = document.getElementById('ls-' + section);
+  if (row) {
+    row.classList.add('done');
+    const i = row.querySelector('i');
+    if (i) i.className = 'ti ti-circle-check';
+  }
+  const count = document.getElementById('pg-count');
+  if (count) count.textContent = `${streamStats.done} / ${streamStats.total} sections`;
+  const fill = document.getElementById('pg-fill');
+  if (fill) fill.style.width = Math.round((streamStats.done / streamStats.total) * 100) + '%';
+  // render the finished section immediately, one by one
+  if (content) {
+    const live = document.getElementById('live-results');
+    if (live) live.insertAdjacentHTML('beforeend', card(section, content, true));
+  }
+}
+
+function clearLoading() { if (loadTimer) { clearInterval(loadTimer); loadTimer = null; } }
+
+function showError(msg) {
+  clearLoading();
+  document.getElementById('results-area').innerHTML = `
+    <div style="padding: 8px 0">
+      <div class="error-box"><i class="ti ti-alert-circle" style="vertical-align:-2px;margin-right:6px"></i>${msg}</div>
+    </div>`;
+}
+
+function postForm(url, formData) {
+  return fetch(url, { method: 'POST', body: formData }).then(async res => {
+    if (!res.ok) {
+      let detail = 'Unknown error';
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      const err = new Error(`Error ${res.status}: ${detail}`);
+      err.fatal = true;
+      throw err;
+    }
+    return res;
+  });
+}
+
+async function streamSummarize(formData) {
+  const res = await postForm('/summarize/stream', formData);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', result = null, streamError = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const line = chunk.split('\n').find(l => l.startsWith('data: '));
+      if (!line) continue;
+      const ev = JSON.parse(line.slice(6));
+      if (ev.type === 'meta') stageWriting();
+      else if (ev.type === 'section_done') markSectionDone(ev.section, ev.content);
+      else if (ev.type === 'done') result = ev.result;
+      else if (ev.type === 'error') streamError = ev.detail;
+    }
+  }
+  if (streamError) {
+    const friendly = /rate_limit|429/i.test(streamError)
+      ? "Our AI provider's quota is temporarily exhausted. Please try again later."
+      : streamError;
+    throw Object.assign(new Error(friendly), { fatal: true });
+  }
+  if (!result) throw new Error('Stream ended unexpectedly.');
+  return result;
+}
+
+async function plainSummarize(formData) {
+  const res = await postForm('/summarize', formData);
+  return res.json();
+}
+
+async function runSummarize(formData, sourceLabel) {
+  setBusy(true);
+  showLoading();
+  let data = null;
+  try {
+    data = await streamSummarize(formData);
+  } catch (e) {
+    if (e.fatal) {
+      showError(escapeHtml(e.message));
+      setBusy(false);
+      refreshUsage();
+      return;
+    }
+    // Streaming unavailable → fall back to the plain endpoint
+    try {
+      data = await plainSummarize(formData);
+    } catch (e2) {
+      showError(escapeHtml(e2.message));
+      setBusy(false);
+      refreshUsage();
+      return;
+    }
+  }
+  renderResults(data);
+  addRecent(data.title || sourceLabel, formData.get('doi') || null);
+  setBusy(false);
+  refreshUsage();
+  if (!data.cached) pixelCelebration();
+}
+
+async function summarizePdf() {
+  if (!selectedFile) return;
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  await runSummarize(formData, selectedFile.name);
+}
+
+async function summarizeDoi() {
+  const doi = document.getElementById('doi-input').value.trim();
+  if (!doi) return;
+  const formData = new FormData();
+  formData.append('doi', doi);
+  await runSummarize(formData, doi);
+}
+
+function setBusy(busy) {
+  document.getElementById('summarize-pdf-btn').disabled = busy || !selectedFile;
+  const doiBtn = document.querySelector('#tab-doi button');
+  if (doiBtn) doiBtn.disabled = busy;
+}
+
+function addRecent(title, doi) {
+  recentPapers.unshift(doi ? { t: title, doi } : { t: title });
+  recentPapers = recentPapers.slice(0, 5);
+  try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers)); } catch (e) {}
+  renderRecent();
+}
+
+function loadRecent() {
+  try {
+    recentPapers = (JSON.parse(localStorage.getItem('recent_papers') || '[]') || [])
+      .map(item => (typeof item === 'string' ? { t: item } : item));
+  } catch (e) { recentPapers = []; }
+  renderRecent();
+}
+
+function renderRecent() {
+  document.getElementById('recent-list').innerHTML = recentPapers.length
+    ? recentPapers
+        .map(p => {
+          const label = escapeHtml(String(p.t).slice(0, 34)) + (String(p.t).length > 34 ? '...' : '');
+          const clickable = p.doi ? ` style="cursor:pointer" title="Summarize this DOI again" onclick="rerunDoi(this)" data-doi="${escapeHtml(p.doi)}"` : '';
+          return `<span class="recent-item"${clickable}><i class="ti ti-file-text"></i>${label}</span>`;
+        })
+        .join('')
+    : '<span style="color:#b0b6bd">None yet</span>';
+}
+
+function rerunDoi(el) {
+  const doi = el.dataset.doi;
+  if (!doi) return;
+  switchTab('doi');
+  document.getElementById('doi-input').value = doi;
+  summarizeDoi();
+}
+
+function renderResults(data) {
+  clearLoading();
+  stageDone();
+  currentPaperText = data.full_text || data.summary;
+  chatHistory = [];
+
+  const fieldText = k => String(data[k] == null ? "" : data[k]);
+  const originalWords = (data.full_text || "").split(/\s+/).filter(Boolean).length;
+  const summaryWords = SECTION_DISPLAY_ORDER
+    .reduce((sum, k) => sum + fieldText(k).split(/\s+/).filter(Boolean).length, 0);
+  const reduction = originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0;
+  const readMin = Math.max(1, Math.round(summaryWords / 200));
+
+  document.getElementById('results-area').innerHTML = `
+    <div class="paper-title">${escapeHtml(data.title || "Untitled paper")}</div>
+    <div class="tag-row">
+      <span class="tag">${escapeHtml(data.source || 'unknown')}</span>
+      ${data.year ? `<span class="tag">${escapeHtml(data.year)}</span>` : ""}
+      ${data.journal ? `<span class="tag">${escapeHtml(String(data.journal).slice(0, 40))}</span>` : ""}
+      ${data.cited_by != null ? `<span class="tag">${data.cited_by} citations</span>` : ""}
+      ${data.cached ? `<span class="tag">cached</span>` : ""}
+    </div>
+
+    <div class="stats">
+      <p class="stats-label">Reading time saved</p>
+      <div class="stats-big">
+        <span class="num" id="stat-num">0%</span>
+        <span class="pill good"><i class="ti ti-clock"></i>~${readMin} min read</span>
+      </div>
+      <div class="statbar" style="margin-bottom:16px"><div class="fill" id="stat-fill" style="width:0%"></div></div>
+      <div class="stat-row"><span>Original paper</span><span class="val">${originalWords.toLocaleString()} words</span></div>
+      <div class="stat-row"><span>Summary</span><span class="val">${summaryWords.toLocaleString()} words</span></div>
+      <div class="stat-row"><span>Reading time</span><span class="val">~${readMin} min</span></div>
+    </div>
+
+    <div class="results">
+      ${SECTION_DISPLAY_ORDER.map(k => card(k, fieldText(k))).join('')}
+    </div>
+
+    <div class="action-row">
+      <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i>Export .txt</button>
+      <button class="secondary" onclick="downloadMarkdown()"><i class="ti ti-markdown"></i>.md</button>
+      <button class="secondary" onclick="exportPdf()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+      <span class="spacer"></span>
+      <button onclick="resetForNewPaper()"><i class="ti ti-plus"></i>Summarize another paper</button>
+    </div>
+
+    <div class="chat-section">
+      <p class="chat-heading">Ask about this paper</p>
+      <div id="chat-messages"></div>
+      <div class="chat-suggestions" id="chat-suggestions">
+        <span class="chip" onclick="askSuggestion('What is the main contribution of this paper?')">Main contribution?</span>
+        <span class="chip" onclick="askSuggestion('Explain the methodology in simple terms.')">Methodology explained simply</span>
+        <span class="chip" onclick="askSuggestion('What are the limitations and open questions?')">Limitations?</span>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Ask a question about this paper..." onkeypress="if(event.key==='Enter') sendChat()">
+        <i class="ti ti-send" onclick="sendChat()"></i>
+      </div>
+    </div>
+  `;
+
+  window.currentResult = data;
+  animateCount(document.getElementById('stat-num'), reduction);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const fill = document.getElementById('stat-fill');
+    if (fill) fill.style.width = Math.max(3, Math.min(100, reduction)) + '%';
+  }));
+}
+
+function resetForNewPaper() {
+  selectedFile = null;
+  const wrap = document.getElementById('file-card-wrap');
+  if (wrap) wrap.innerHTML = '';
+  const btn = document.getElementById('summarize-pdf-btn');
+  if (btn) btn.disabled = true;
+  const doi = document.getElementById('doi-input');
+  if (doi) doi.value = '';
+  currentPaperText = "";
+  chatHistory = [];
+  document.getElementById('results-area').innerHTML = `
+    <div class="empty-state">
+      <i class="ti ti-file-description empty-icon"></i>
+      <span>Upload a PDF or paste a DOI above — your structured summary will appear here, section by section</span>
+    </div>`;
+  setBusy(false);
+  document.querySelector('.app-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function animateCount(el, target) {
+  if (!el) return;
+  const t0 = performance.now(), dur = 900;
+  function tick(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * eased) + '%';
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function renderSectionBody(text) {
+  const lines = String(text).split('\n');
+  const out = [];
+  let list = null; // 'ul' | 'ol'
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    let m;
+    if ((m = line.match(/^[-•*]\s+(.*)/))) {
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${escapeHtml(m[1])}</li>`);
+    } else if ((m = line.match(/^\d+[.)]\s+(.*)/))) {
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${escapeHtml(m[1])}</li>`);
+    } else {
+      closeList();
+      out.push(`<p class="sec-paragraph">${escapeHtml(line)}</p>`);
+    }
+  }
+  closeList();
+  return out.join('');
+}
+
+function card(sectionKey, body, live = false) {
+  const meta = SECTION_META[sectionKey] || { icon: 'ti-file-text', label: sectionKey };
+  const text = String(body == null ? "" : body).trim();
+  if (!text || text === "Data not provided by the model.") return "";
+  return `
+    <div class="result-card${live ? ' live-in' : ''}">
+      <div class="result-card-header">
+        <span class="rc-icon"><i class="ti ${meta.icon}"></i></span>
+        <span class="rc-title">${escapeHtml(meta.label)}</span>
+        <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(text)}"></i>
+      </div>
+      <div class="result-card-body">${renderSectionBody(text)}</div>
+    </div>
+  `;
+}
+
+function copyText(el) {
+  const text = decodeURIComponent(el.dataset.text);
+  navigator.clipboard.writeText(text);
+  el.className = 'ti ti-check copy-btn';
+  setTimeout(() => { el.className = 'ti ti-copy copy-btn'; }, 1500);
+}
+
+  const sectionReport = d => `## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Key Statistics\n${d.key_stats || ''}\n\n## Future Work\n${d.future_work}`;
+
+function downloadSummary() {
+  const d = window.currentResult;
+  const report = `# ${d.title}\n\n${sectionReport(d)}`;
+  const blob = new Blob([report], { type: 'text/plain' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'paper_summary.txt';
+  link.click();
+}
+
+function exportPdf() {
+  const d = window.currentResult;
+  if (!d) return;
+  const esc = escapeHtml;
+  const sec = (t, b) => (b && b.trim() ? `<h2>${t}</h2><div class="sec">${esc(b)}</div>` : "");
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(d.title || 'Paper summary')}</title>
+    <style>
+      body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; line-height: 1.7; padding: 0 20px; }
+      h1 { font-size: 1.5rem; letter-spacing: -.01em; border-bottom: 2px solid #1a1a1a; padding-bottom: 12px; }
+      h2 { font-size: 1rem; margin: 26px 0 8px; text-transform: uppercase; letter-spacing: .06em; }
+      .sec { font-size: .92rem; color: #333; white-space: pre-wrap; }
+      .meta { color: #777; font-size: .85rem; margin: 10px 0 0; }
+      @media print { .noprint { display: none; } }
+    </style></head><body>
+    <h1>${esc(d.title || 'Untitled paper')}</h1>
+    ${d.authors && d.authors.length ? `<p class="meta">${esc(d.authors.join(', '))}</p>` : ""}
+    ${d.journal ? `<p class="meta">${esc(d.journal)}${d.year ? ' · ' + esc(d.year) : ''}</p>` : ""}
+    ${sec('Summary', d.summary)}
+    ${sec('Methodology', d.methodology)}
+    ${sec('Research Gaps', d.research_gaps)}
+    ${sec('Findings', d.findings)}
+    ${sec('Key Statistics', d.key_stats)}
+    ${sec('Future Work', d.future_work)}
+    <p class="noprint" style="margin-top:30px;"><button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">Save as PDF</button></p>
+    </body></html>`);
+  w.document.close();
+}
+
+function downloadMarkdown() {
+  const d = window.currentResult;
+  if (!d) return;
+  const report = `# ${d.title}\n\n${sectionReport(d)}`;
+  const blob = new Blob([report], { type: 'text/markdown' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'paper_summary.md';
+  link.click();
+}
+
+function fillExampleDoi() {
+  document.getElementById('doi-input').value = '10.1371/journal.pone.0121283';
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+  const suggestions = document.getElementById('chat-suggestions');
+  if (suggestions) suggestions.remove();
+
+  chatHistory.push({ role: 'user', content: question });
+  renderChat();
+  const box = document.getElementById('chat-messages');
+  box.insertAdjacentHTML('beforeend', '<div class="chat-bubble assistant chat-typing" id="chat-typing"><span></span><span></span><span></span></div>');
+  box.scrollTop = box.scrollHeight;
+
+  const answer = await askChatWithRetry(question);
+  chatHistory.push({ role: 'assistant', content: answer });
+  renderChat();
+}
+
+async function askChatWithRetry(question, attempts = 2) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data.answer;
+      // Client errors (400/429/etc.) won't get better on retry
+      if (res.status < 500) return `⚠️ ${data.detail || 'Something went wrong. Please try again.'}`;
+    } catch (e) { /* network error → retry */ }
+    if (i < attempts - 1) await new Promise(r => setTimeout(r, 900));
+  }
+  return '⚠️ Could not reach the server. Please try again.';
+}
+
+function askSuggestion(question) {
+  document.getElementById('chat-input').value = question;
+  sendChat();
+}
+
+async function refreshUsage() {
+  try {
+    const res = await fetch('/usage-status');
+    if (!res.ok) return;
+    const { used, limit } = await res.json();
+    const chip = document.getElementById('usage-chip');
+    if (!chip) return;
+    const left = Math.max(0, limit - used);
+    chip.textContent = left > 0 ? `${left} of ${limit} summaries left today` : 'Daily limit reached';
+    chip.classList.toggle('warn', left === 0);
+    chip.style.display = 'inline-block';
+  } catch (e) { /* chip stays hidden */ }
+}
+
+function initScrollCueFade() {
+  const cue = document.querySelector('button.scroll-cue');
+  if (!cue) return;
+
+  // Wrap in a container so the fade/slide doesn't fight the bob animation
+  // (bob runs on the button via CSS transform; we control the wrapper)
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;' +
+    'will-change:opacity,transform;transition:opacity .22s ease,transform .22s ease;';
+  cue.parentNode.insertBefore(wrap, cue);
+  wrap.appendChild(cue);
+
+  function update() {
+    // Fade fully out over the first 200px of scroll
+    const progress = Math.min(1, window.scrollY / 200);
+    const opacity  = 1 - progress;
+    wrap.style.opacity      = opacity.toFixed(3);
+    // Drift upward 24px as it vanishes — the motion-graphic feel
+    wrap.style.transform    = `translateY(${(progress * -24).toFixed(1)}px)`;
+    wrap.style.pointerEvents = progress > 0.9 ? 'none' : '';
+  }
+
+  let raf = null;
+  window.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = null; update(); });
+  }, { passive: true });
+
+  update(); // sync immediately in case page was already scrolled on load
+}
+
+function initParallax() {
+  // The current visual direction is intentionally minimal and professional;
+  // no layered decorative motion is needed.
+}
+
+function pixelCelebration() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const card = document.querySelector('.app-card');
+  if (!card) return;
+  const colors = ['#4cc9f0', '#8cc76a', '#ffd94d', '#ffffff', '#4787c3'];
+  const rect = card.getBoundingClientRect();
+  for (let n = 0; n < 26; n++) {
+    const px = document.createElement('div');
+    const size = 5 + Math.random() * 6;
+    px.style.cssText = `position:fixed;z-index:60;width:${size.toFixed(0)}px;height:${size.toFixed(0)}px;`
+      + `background:${colors[n % colors.length]};left:${(rect.left + Math.random() * rect.width).toFixed(0)}px;`
+      + `top:${(rect.top + 10).toFixed(0)}px;pointer-events:none;border-radius:1px;`;
+    document.body.appendChild(px);
+    const dx = (Math.random() - .5) * 130;
+    const dy = 130 + Math.random() * 170;
+    const rot = (Math.random() - .5) * 400;
+    px.animate([
+      { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+      { transform: `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`, opacity: 0 },
+    ], { duration: 900 + Math.random() * 700, easing: 'cubic-bezier(.2,.6,.4,1)' }).onfinish = () => px.remove();
+  }
+}
+
+function applyTheme(theme) {
+  document.body.classList.toggle('dark', theme === 'dark');
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.className = theme === 'dark' ? 'ti ti-sun' : 'ti ti-moon';
+}
+
+function toggleTheme() {
+  const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  applyTheme(next);
+}
+
+function renderChat() {
+  document.getElementById('chat-messages').innerHTML = chatHistory
+    .map(m => `<div class="chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`)
+    .join('');
+  const box = document.getElementById('chat-messages');
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+
+</body>
+</html>

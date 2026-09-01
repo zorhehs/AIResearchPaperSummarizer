@@ -1,17 +1,19 @@
 import sqlite3
 import uuid
 from datetime import date
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import APIRouter, Request, Response, HTTPException
 from pydantic import BaseModel
 
-app = FastAPI()
+import os
 
-DB_PATH = "users.db"
+router = APIRouter()
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "users.db")
 DAILY_LIMIT = 5  # summaries per session per day
 
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
+def init_db(db_path: str = None):
+    conn = sqlite3.connect(db_path or DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             session_id TEXT PRIMARY KEY,
@@ -31,7 +33,10 @@ def init_db():
     conn.close()
 
 
-init_db()
+def _connect():
+    """Open a connection, lazily ensuring the schema exists."""
+    init_db()
+    return sqlite3.connect(DB_PATH)
 
 
 class EmailInput(BaseModel):
@@ -51,11 +56,11 @@ def get_or_create_session_id(request: Request, response: Response) -> str:
     return session_id
 
 
-@app.post("/save-email")
+@router.post("/save-email")
 def save_email(data: EmailInput, request: Request, response: Response):
     session_id = get_or_create_session_id(request, response)
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     conn.execute(
         "INSERT OR REPLACE INTO users (session_id, email) VALUES (?, ?)",
         (session_id, data.email)
@@ -66,13 +71,13 @@ def save_email(data: EmailInput, request: Request, response: Response):
     return {"status": "saved", "session_id": session_id}
 
 
-@app.get("/get-email")
+@router.get("/get-email")
 def get_email(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id:
         return {"email": None}
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.execute("SELECT email FROM users WHERE session_id = ?", (session_id,))
     row = cursor.fetchone()
     conn.close()
@@ -86,7 +91,7 @@ def check_and_increment_usage(session_id: str):
     Raises an error if the session has hit today's limit.
     """
     today = str(date.today())
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
 
     cursor = conn.execute(
         "SELECT count FROM usage WHERE session_id = ? AND usage_date = ?",
@@ -110,14 +115,14 @@ def check_and_increment_usage(session_id: str):
     conn.close()
 
 
-@app.get("/usage-status")
+@router.get("/usage-status")
 def usage_status(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id:
         return {"used": 0, "limit": DAILY_LIMIT}
 
     today = str(date.today())
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.execute(
         "SELECT count FROM usage WHERE session_id = ? AND usage_date = ?",
         (session_id, today)

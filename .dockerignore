@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*.db
+users.db
+temp_uploads/
+tests/sample_papers/
+.git/
+full_code_context.txt

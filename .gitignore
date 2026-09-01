@@ -5,3 +5,5 @@ __pycache__/
 .env
 .env
 *.db
+users.db
+src/temp_uploads/
