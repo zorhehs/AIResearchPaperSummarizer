@@ -1,18 +1,61 @@
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 CHUNK_SIZE = 20000
-OVERLAP = 100
+# Overlap in chars between consecutive chunks. Large enough to bridge a
+# paragraph boundary so context is not lost at the cut.
+OVERLAP = 800
 MAX_RETRIES = 3
 RETRY_DELAY = 10
+MAX_WORKERS = 5
+
+_SEPARATORS = ("\n\n", "\n", ". ")
+
+
+def _find_cut(text: str, lo: int, hi: int):
+    """Best split point in [lo, hi): paragraph break > line break > sentence
+    end. Returns the index just AFTER the separator, or None for a hard cut."""
+    for sep in _SEPARATORS:
+        idx = text.rfind(sep, lo, hi)
+        if idx != -1:
+            return idx + len(sep)
+    return None
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> list:
+    """Split text into chunks of at most `chunk_size` chars.
+
+    Cuts are aligned to natural boundaries wherever possible - paragraph
+    breaks, then line breaks (what most PDF extractors emit), then sentence
+    ends - so sentences, tables, and references are never split mid-way.
+    Falls back to a hard cut for dense text.
+    """
+    if not text:
+        return []
+
     chunks = []
     start = 0
-    while start < len(text):
-        end = start + chunk_size
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_size, n)
+        if end < n:
+            # Prefer a natural boundary within the back half of the chunk
+            cut = _find_cut(text, start + chunk_size // 2, end)
+            if cut and cut > start:
+                end = cut
         chunks.append(text[start:end])
-        start = end - overlap
+        if end >= n:
+            break
+        # Next chunk starts `overlap` chars before the cut, realigned to the
+        # nearest natural boundary at or after that point.
+        nxt = end - overlap
+        if nxt <= start:
+            nxt = end - overlap if end - overlap > start else end
+        else:
+            cut = _find_cut(text, nxt, end)
+            if cut and cut > nxt:
+                nxt = cut
+        start = max(nxt, start + 1)
     return chunks
 
 
@@ -32,27 +75,31 @@ def _call_groq_with_retry(prompt: str) -> str:
             delay *= 2
 
 
-
 def summarize_chunk(chunk: str, chunk_num: int, total_chunks: int) -> str:
     print(f"  -> summarizing chunk {chunk_num}/{total_chunks}...")
     prompt = f"""This is part {chunk_num} of {total_chunks} of a research paper.
-Summarize the key points of THIS SECTION ONLY in 100-150 words.
+Extract the key information from THIS SECTION ONLY as terse bullet points (one per line, starting with "- ").
+For each bullet capture one concrete fact: a claim, method, dataset, or result.
+ALWAYS preserve exact numbers, metric names, percentages, dataset names, and model names verbatim.
+Do NOT write flowing prose. Do NOT add commentary. 5-10 bullets maximum.
 
 Text:
 {chunk}
 """
-    result = _call_groq_with_retry(prompt)
-    time.sleep(1)
-    return result
+    return _call_groq_with_retry(prompt)
 
 
 def reduce_summaries(chunk_summaries: list) -> str:
     print("  -> combining chunk summaries...")
     combined = "\n\n".join(chunk_summaries)
-    prompt = f"""Below are summaries of consecutive sections of a research paper, in order.
-Combine them into one coherent summary of the ENTIRE paper, preserving logical flow.
+    prompt = f"""Below are extracted facts from consecutive sections of a research paper, in order.
+Synthesize them into one coherent brief of the ENTIRE paper (250-400 words) that preserves logical flow.
+Rules:
+- Preserve ALL exact figures verbatim (accuracies, percentages, dataset sizes, model names).
+- Organize as: what the paper does, how, and what it achieves, with the key numbers inline.
+- Drop duplicates and trivia; never invent a number that is not in the facts.
 
-Section summaries:
+Extracted facts:
 {combined}
 """
     return _call_groq_with_retry(prompt)
@@ -66,10 +113,16 @@ def get_condensed_text(full_text: str) -> str:
     chunks = chunk_text(full_text)
     print(f"  -> paper split into {len(chunks)} chunks ({len(chunks) + 1} API calls total)")
 
-    chunk_summaries = [
-        summarize_chunk(chunk, i + 1, len(chunks))
-        for i, chunk in enumerate(chunks)
-    ]
+    # Chunks are independent → summarize them in parallel. Rate limiting is
+    # handled inside _ask_groq's retry/backoff, so no artificial sleeps here.
+    chunk_summaries = [None] * len(chunks)
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(chunks))) as executor:
+        futures = {
+            executor.submit(summarize_chunk, chunk, i + 1, len(chunks)): i
+            for i, chunk in enumerate(chunks)
+        }
+        for fut in as_completed(futures):
+            chunk_summaries[futures[fut]] = fut.result()
 
     return reduce_summaries(chunk_summaries)
 

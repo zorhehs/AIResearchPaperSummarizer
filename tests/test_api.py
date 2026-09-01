@@ -43,7 +43,7 @@ def test_summarize_success(client, monkeypatch):
         "authors": ["Jane Doe"], "year": "2025", "journal": "J of Tests", "cited_by": 3,
         "full_text": "word " * 100,
     })
-    monkeypatch.setattr(api, "summarize_paper", lambda text: {
+    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="": {
         "summary": "A summary.", "methodology": "A method.",
         "research_gaps": "Some gaps.", "findings": "Some findings.",
         "future_work": "Future work.", "full_text": text,

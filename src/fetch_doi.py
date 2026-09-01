@@ -1,9 +1,11 @@
 import requests
 from typing import Optional
 
+
 def get_pdf_url_from_doi(doi: str, email: str = "zorhehs@gmail.com") -> Optional[str]:
-    url = f"https://api.unpaywall.org/v2/{doi}?email={email}"
-    response = requests.get(url)
+    encoded_doi = requests.utils.quote(doi, safe="")
+    url = f"https://api.unpaywall.org/v2/{encoded_doi}?email={email}"
+    response = requests.get(url, timeout=20, headers={"User-Agent": "AI-Research-Summarizer/1.0"})
 
     if response.status_code != 200:
         return None

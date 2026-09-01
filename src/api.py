@@ -59,11 +59,15 @@ async def summarize(
         if not result["full_text"]:
             raise HTTPException(
                 status_code=422,
-                detail="Could not extract usable text from this input."
+                detail="Could not extract usable text from this input. Please upload the PDF directly or use a DOI that exposes the abstract/text."
             )
 
         try:
-            summary_result = summarize_paper(result["full_text"])
+            summary_result = summarize_paper(
+                result["full_text"],
+                title=result.get("title", ""),
+                abstract=result.get("abstract", ""),
+            )
         except Exception as e:
             error_msg = str(e)
             if "rate_limit" in error_msg.lower() or "429" in error_msg:
@@ -125,7 +129,7 @@ async def summarize_stream(
         if not result["full_text"]:
             raise HTTPException(
                 status_code=422,
-                detail="Could not extract usable text from this input."
+                detail="Could not extract usable text from this input. Please upload the PDF directly or use a DOI that exposes the abstract/text."
             )
 
         meta = {
@@ -141,7 +145,11 @@ async def summarize_stream(
         def event_source():
             yield f"data: {json.dumps({'type': 'meta', 'meta': meta})}\n\n"
             try:
-                for event in stream_summarize_paper(result["full_text"]):
+                for event in stream_summarize_paper(
+                    result["full_text"],
+                    title=result.get("title", ""),
+                    abstract=result.get("abstract", ""),
+                ):
                     yield f"data: {json.dumps(event)}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"

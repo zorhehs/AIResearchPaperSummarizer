@@ -53,7 +53,7 @@ def test_stream_pipeline_error(client, monkeypatch):
 def test_stream_success(client, monkeypatch):
     monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
 
-    def fake_stream(text):
+    def fake_stream(text, title="", abstract=""):
         yield {"type": "section_done", "section": "summary", "content": "A summary."}
         yield {"type": "section_done", "section": "findings", "content": "Some findings."}
         yield {"type": "done", "result": {
@@ -81,7 +81,7 @@ def test_stream_success(client, monkeypatch):
 def test_stream_section_failure_surfaces_error(client, monkeypatch):
     monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
 
-    def failing_stream(text):
+    def failing_stream(text, title="", abstract=""):
         yield {"type": "error", "detail": "Groq error: rate limit exceeded"}
 
     monkeypatch.setattr(api, "stream_summarize_paper", failing_stream)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-AI Research Paper Summarizer: upload a research paper PDF or paste a DOI and get a structured summary (Summary, Methodology, Research Gaps, Findings, Future Work), an Obsidian-style knowledge graph, and a chat to ask questions about the paper.
+AI Research Paper Summarizer: upload a research paper PDF or paste a DOI and get a structured summary (Summary, Methodology, Research Gaps, Findings, Future Work, Key Statistics), an Obsidian-style knowledge graph, and a chat to ask questions about the paper.
 
 ## Commands
 
@@ -29,10 +29,10 @@ Environment: `.env` in project root with `GROQ_API_KEY=gsk_...` (required) and o
 ## Architecture
 
 ```
-PDF / DOI ──► pipeline.py ──► summarize.py ──► 5 section strategies (parallel)
-              │ extract.py      (Groq gpt-oss-120b,  │ each: echo/meta guard + retry
-              │ clean.py         Ollama fallback)    └─► cached in users.db (SQLite)
-              │ metadata.py
+PDF / DOI ──► pipeline.py ──► summarize.py ──► 6 section strategies (parallel)
+              │ extract.py      (Groq gpt-oss-120b,  │ each: echo/meta guard +
+              │ clean.py         Ollama fallback)    │  findings digit-check
+              │ metadata.py                          └─► cached in users.db (SQLite)
               └─ fetch_doi.py (Unpaywall) + Crossref (authors, year, citations)
                      │
 FastAPI (src/api.py) ─┴─► static/index.html  (vanilla JS, canvas knowledge graph)
@@ -41,8 +41,8 @@ FastAPI (src/api.py) ─┴─► static/index.html  (vanilla JS, canvas knowled
 Key behaviors to preserve when changing code:
 
 - **Input routing** (`src/pipeline.py::process_input`): PDF path → extract/clean/metadata; DOI → Unpaywall PDF URL → download → same PDF path, else abstract-only from Crossref. Returns a dict with `source`, `title`, `abstract`, `full_text`, `error`.
-- **Summarization** (`src/summarize.py`): papers ≤ 60k chars (`SINGLE_PASS_CHAR_LIMIT`) summarized in one pass; longer ones condensed via `src/map_reduce.py` (chunk → summarize → combine). Each section strategy guards against LLM echoing the prompt (TEMPLATE_PHRASES) and meta preambles (META_PHRASES), with retries. Groq `openai/gpt-oss-120b` primary, `gpt-oss-20b` fallback, local Ollama (`llama3.2:1b` at `localhost:11434`) as last resort.
-- **Summary cache**: SHA-256 of full text → `summary_cache` table in `users.db` (SQLite). Identical papers never re-hit the LLM.
+- **Summarization** (`src/summarize.py`): papers ≤ 60k chars (`SINGLE_PASS_CHAR_LIMIT`) summarized in one pass; longer ones condensed via `src/map_reduce.py` (boundary-aware chunking at paragraph/line/sentence breaks → parallel fact-extraction per chunk → synthesis brief). Sections are prompted with paper title/abstract context (`_paper_context_block`). Each section strategy guards against LLM echoing the prompt (TEMPLATE_PHRASES) and meta preambles (META_PHRASES); `findings` retries once if the response contains no digits. Groq `openai/gpt-oss-120b` primary, `gpt-oss-20b` fallback, local Ollama (`llama3.2:1b` at `localhost:11434`) as last resort.
+- **Summary cache**: `CACHE_VERSION` + SHA-256 of full text → `summary_cache` table in `users.db` (SQLite). Identical papers never re-hit the LLM; bump `CACHE_VERSION` when summary shape/prompting changes so stale entries are not served.
 - **Rate limiting** (`src/user_session.py`): cookie-based `session_id`, 5 summaries per session per day (`DAILY_LIMIT`), `users` + `usage` tables in SQLite.
 - **API** (`src/api.py`): `/summarize` (multipart PDF or DOI form), `/summarize/stream` (same input; SSE with `meta`, `section_done`, `done`, `error` events via `summarize.stream_summarize_paper`), `/chat`, `/health`, `/` serves `static/index.html`; plus `/save-email`, `/get-email`, `/usage-status` from the user router. Rate-limit/quota errors map to 503.
 

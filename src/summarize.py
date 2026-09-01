@@ -21,6 +21,11 @@ SINGLE_PASS_CHAR_LIMIT = 60000
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "users.db")
 
 
+# Bump when summary shape/prompting changes so stale cached entries
+# (e.g. pre-key_stats 5-section summaries) are not served forever.
+CACHE_VERSION = "v2"
+
+
 def _cache_get(text: str):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -33,7 +38,7 @@ def _cache_get(text: str):
         """)
         row = conn.execute(
             "SELECT result_json FROM summary_cache WHERE text_hash = ?",
-            (hashlib.sha256(text.encode()).hexdigest(),),
+            (hashlib.sha256(f"{CACHE_VERSION}:{text}".encode()).hexdigest(),),
         ).fetchone()
         conn.close()
         return json.loads(row[0]) if row else None
@@ -54,7 +59,7 @@ def _cache_put(text: str, result: dict):
         payload = {k: v for k, v in result.items() if k != "full_text"}
         conn.execute(
             "INSERT OR REPLACE INTO summary_cache (text_hash, result_json) VALUES (?, ?)",
-            (hashlib.sha256(text.encode()).hexdigest(), json.dumps(payload)),
+            (hashlib.sha256(f"{CACHE_VERSION}:{text}".encode()).hexdigest(), json.dumps(payload)),
         )
         conn.commit()
         conn.close()
@@ -186,14 +191,34 @@ Avoid vague statements like "the method works well".""",
 Each suggested direction should be actionable, not generic.""",
         "format": "paragraph_plus_list",
     },
+    "key_stats": {
+        "instruction": """Extract the key quantitative results as a bulleted list of 3-6 items (one per line, each starting with "- ").
+Each bullet follows the pattern "metric: value (context/comparison)" — e.g. "Accuracy: 94.2% (+3.1 over the BERT baseline on GLUE)".
+Include dataset sizes, sample counts, or runtime figures where the paper reports them.
+If the paper reports no quantitative results, write exactly: "No quantitative results reported."
+Copy numbers verbatim from the paper — never round, convert, or estimate.""",
+        "format": "bullet_list",
+    },
 }
 
-_SECTION_ORDER = ["summary", "methodology", "research_gaps", "findings", "future_work"]
+_SECTION_ORDER = ["summary", "methodology", "research_gaps", "findings", "future_work", "key_stats"]
 
 
-def _ask_section(section: str, condensed_text: str) -> str:
+def _paper_context_block(title: str = "", abstract: str = "") -> str:
+    """Optional identity block prepended to section prompts so the model can
+    anchor its analysis to the paper instead of writing generic prose."""
+    parts = []
+    if title:
+        parts.append(f"Paper title: {title}")
+    if abstract:
+        parts.append(f"Paper abstract: {abstract[:1500]}")
+    return ("\n".join(parts) + "\n") if parts else ""
+
+
+def _ask_section(section: str, condensed_text: str, title: str = "", abstract: str = "") -> str:
     strategy = SECTION_STRATEGIES[section]
-    prompt = f"""{strategy["instruction"]}
+    prompt = f"""{_paper_context_block(title, abstract)}
+{strategy["instruction"]}
 
 {PAPER_TEXT_RULE}
 
@@ -211,6 +236,16 @@ Paper text:
                     "Do NOT repeat the instructions. Write real analysis of the paper text only."})
             response_text = _ask_groq(messages).replace("```json", "").replace("```", "").strip()
             if response_text and not _is_template_echo(response_text):
+                # A findings section without a single number is almost always
+                # vague filler — retry once asking for the quantitative results.
+                if section == "findings" and attempt == 0 and not any(ch.isdigit() for ch in response_text):
+                    messages.append({"role": "user", "content":
+                        "Your response contains no concrete numbers. Re-answer with the paper's actual "
+                        "quantitative results (metrics, percentages, dataset sizes). If the paper truly "
+                        "reports none, say so explicitly."})
+                    retry_text = _ask_groq(messages).replace("```json", "").replace("```", "").strip()
+                    if retry_text and any(ch.isdigit() for ch in retry_text):
+                        response_text = retry_text
                 # Strip a leading meta sentence like "I can provide a step-by-step analysis..."
                 if _is_meta_response(response_text):
                     lines = response_text.split("\n")
@@ -235,7 +270,7 @@ Paper text:
     raise Exception(f"Section '{section}' failed: {last_error}")
 
 
-def summarize_paper(text: str, session_id: str = None) -> dict:
+def summarize_paper(text: str, session_id: str = None, title: str = "", abstract: str = "") -> dict:
     if session_id:
         from user_session import check_and_increment_usage
         check_and_increment_usage(session_id)
@@ -255,12 +290,15 @@ def summarize_paper(text: str, session_id: str = None) -> dict:
     else:
         condensed_text = text[:SINGLE_PASS_CHAR_LIMIT]
 
-    # Generate each of the 5 sections with its own strategy, in parallel
+    # Generate each section with its own strategy, in parallel
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=len(_SECTION_ORDER)) as executor:
         results = dict(zip(
             _SECTION_ORDER,
-            executor.map(lambda s: _ask_section(s, condensed_text), _SECTION_ORDER),
+            executor.map(
+                lambda s: _ask_section(s, condensed_text, title=title, abstract=abstract),
+                _SECTION_ORDER,
+            ),
         ))
 
     result = {k: (v if v else "Data not provided by the model.") for k, v in results.items()}
@@ -303,11 +341,11 @@ Answer:"""
         raise Exception(f"Local LLM Error - {str(e)}")
 
 
-def stream_summarize_paper(text: str):
+def stream_summarize_paper(text: str, title: str = "", abstract: str = ""):
     """Streaming variant of summarize_paper.
 
-    Yields {"type": "section_done", "section": ..., "content": ...} as each of the
-    5 sections finishes (they still run in parallel), then a final
+    Yields {"type": "section_done", "section": ..., "content": ...} as each
+    section finishes (they still run in parallel), then a final
     {"type": "done", "result": {...}} event with the complete summary payload.
     Yields {"type": "error", "detail": ...} instead if every section failed.
     Mirrors summarize_paper: cache first, map-reduce for long papers.
@@ -329,8 +367,11 @@ def stream_summarize_paper(text: str):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     results = {}
     errors = {}
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(_ask_section, s, condensed_text): s for s in _SECTION_ORDER}
+    with ThreadPoolExecutor(max_workers=len(_SECTION_ORDER)) as executor:
+        futures = {
+            executor.submit(_ask_section, s, condensed_text, title, abstract): s
+            for s in _SECTION_ORDER
+        }
         for fut in as_completed(futures):
             section = futures[fut]
             try:

@@ -13,8 +13,9 @@ UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "zorhehs@gmail.com")
 
 
 def get_metadata_from_doi_crossref(doi):
-    url = "https://api.crossref.org/works/" + doi
-    response = requests.get(url)
+    encoded_doi = requests.utils.quote(doi, safe="")
+    url = "https://api.crossref.org/works/" + encoded_doi
+    response = requests.get(url, timeout=20, headers={"User-Agent": "AI-Research-Summarizer/1.0"})
     if response.status_code != 200:
         return {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
 
@@ -79,8 +80,18 @@ def process_input(pdf_path=None, doi=None, email=None):
                 print("PDF download/parsing failed:", e)
 
         meta = get_metadata_from_doi_crossref(doi)
-        meta.update({"source": "doi_metadata_only", "full_text": meta.get("abstract", "")})
-        return meta
+        abstract = (meta.get("abstract") or "").strip()
+        if abstract:
+            meta.update({"source": "doi_metadata_only", "full_text": abstract})
+            return meta
+
+        return {
+            "source": "error",
+            "title": "",
+            "abstract": "",
+            "full_text": "",
+            "error": "This DOI could not be resolved or does not provide usable article text. Please upload the PDF directly or try a different DOI.",
+        }
 
     else:
         raise ValueError("Provide either pdf_path or doi")
