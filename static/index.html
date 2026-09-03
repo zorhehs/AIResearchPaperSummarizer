@@ -252,10 +252,10 @@
   .acc-chevron { margin-left: auto; color: #9ca3af; transition: transform .2s; }
   .accordion[open] .acc-chevron { transform: rotate(180deg); }
   .acc-body { padding: 2px 0 16px; font-size: .92rem; }
-  .term-row { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed #eef0f2; }
+  .term-row { padding: 8px 0; border-bottom: 1px dashed #e9eaeb; }
   .term-row:last-child { border-bottom: none; }
-  .term-name { font-weight: 700; color: #2c5282; min-width: 130px; flex-shrink: 0; }
-  .term-def { color: #4b5563; }
+  .term-name { display: block; font-weight: 700; font-size: .93rem; color: #1c1917; }
+  .term-def { display: block; margin-top: 2px; font-size: .88rem; color: #6b7280; line-height: 1.55; }
   .confidence-note { font-size: .82rem; color: #8a8375; border-top: 1px solid #e9eaeb; padding: 12px 0 0; margin: 18px 0 16px; }
 
   /* ── file card (after selection) ───────── */
@@ -610,7 +610,7 @@
   body.dark .results-table td { color: #e7e5e4; border-color: #241f1b; }
   body.dark .accordion { border-top-color: #2c2822; }
   body.dark .accordion summary { color: #e7e5e4; }
-  body.dark .term-name { color: #8db8e8; }
+  body.dark .term-name { color: #e7e5e4; }
   body.dark .term-def { color: #9ca3af; }
   body.dark .term-row { border-color: #241f1b; }
   body.dark .confidence-note { color: #78716c; border-top-color: #2c2822; }

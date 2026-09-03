@@ -91,12 +91,11 @@ Input errors map to 400/404/422; provider quota problems map to 503.
 | `src/user_session.py` | sessions, daily limits, email capture |
 | `static/index.html` | the entire frontend |
 | `tests/` | pytest suite |
-| `scripts/` | throwaway scripts, not part of the app |
 
 ## Notes
 
 - **Quotes are only as reliable as the model.** Grounding is literal text search: a perfectly true finding whose quote the model slightly reworded will show as *unverified*. That's deliberate — the server won't pretend a quote checks out when it doesn't.
 - **The free tier shaped the code.** Per-minute and per-day token budgets are the reason for the single consolidated call, the input cap, and the model rotation. If you hit quota errors, that's the tier, not a bug.
 - **Email capture stores the address and nothing else** — it isn't used for anything yet.
-- `src/app.py` and `src/map_reduce.py` are older experiment code and are not imported by the server.
+- `src/map_reduce.py` is older experiment code and is not imported by the server.
 - No license has been chosen for this repo yet.
