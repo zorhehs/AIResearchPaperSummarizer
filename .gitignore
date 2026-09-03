@@ -7,3 +7,4 @@ __pycache__/
 *.db
 users.db
 src/temp_uploads/
+dist/
