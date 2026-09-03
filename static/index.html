@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Crect width='8' height='8' fill='%234787c3'/%3E%3Crect x='2' y='1' width='4' height='6' fill='white'/%3E%3Crect x='3' y='2' width='2' height='1' fill='%234787c3'/%3E%3Crect x='3' y='4' width='2' height='1' fill='%234787c3'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.46.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   /* ── reset & base ─────────────────────────── */
   * { box-sizing: border-box; }
@@ -79,7 +80,7 @@
   @media (max-width: 860px) { .hero { padding-top: 52px; } }
 
   /* ── stage & card ───────────────────────── */
-  .stage { position: relative; max-width: 1120px; margin: 48px auto 0; padding: 0 24px; }
+  .stage { position: relative; max-width: 1010px; margin: 48px auto 0; padding: 0 24px; }
 
   .app-card {
     background: #fff;
@@ -87,9 +88,12 @@
     border: 1px solid #e5e7eb;
     box-shadow: 0 2px 4px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06), 0 24px 64px rgba(0,0,0,.06);
     overflow: hidden;
+    min-height: 560px;
+    display: flex; flex-direction: column;
     animation: cardRise .55s cubic-bezier(.16,1,.3,1) both;
     animation-delay: .25s;
   }
+  .app-card .workflow { flex: 1; }
   @keyframes cardRise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
 
   /* ── card header ────────────────────── */
@@ -105,16 +109,15 @@
   }
   .card-head-title i { font-size: 15px; color: #b0b8c1; }
 
-  /* ── usage chip ───────────────────── */
+  /* ── usage chip (quiet text, not a pill) ── */
   .usage-chip {
-    font-size: 11px; font-weight: 500; color: #6b7280;
-    background: #f3f4f6; border: 1px solid #e5e7eb;
-    border-radius: 6px; padding: 4px 10px; display: none;
+    font-size: 11.5px; font-weight: 500; color: #9ca3af;
+    background: none; border: none; padding: 0; display: none;
   }
-  .usage-chip.warn { background: #fef3ea; color: #b45309; border-color: #fcd9a8; }
+  .usage-chip.warn { color: #b45309; }
 
   /* ── single-column workflow ────────── */
-  .workflow { max-width: 860px; margin: 0 auto; padding: 10px 6px 14px; }
+  .workflow { max-width: none; margin: 0; padding: 10px 6px 14px; }
   .step-label {
     display: flex; align-items: center; gap: 9px;
     font-size: 11px; font-weight: 600; color: #9ca3af;
@@ -131,51 +134,47 @@
     background: #fafafa;
     border: 1px solid #e9eaeb; border-radius: 16px;
   }
-  .input-panel { padding: 24px 26px 26px; }
+  .input-panel { padding: 28px 30px 30px; }
   #results-area { min-height: 120px; }
 
-  /* ── segmented mode switch ──────────── */
+  /* ── mode switch: editorial underline tabs ── */
   .mode-switch {
-    display: flex; background: #efefef; border-radius: 10px; padding: 4px; gap: 3px; margin-bottom: 20px;
+    display: flex; gap: 24px; margin-bottom: 20px;
+    border-bottom: 1px solid #e9eaeb; padding: 0 2px;
   }
   .tab {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 9px 10px; font-size: 12.5px; border-radius: 7px;
+    position: relative; display: flex; align-items: center; gap: 7px;
+    padding: 0 2px 10px; font-size: 13px;
     cursor: pointer; color: #9ca3af; font-weight: 500; user-select: none;
-    transition: background .14s, color .14s, box-shadow .14s;
+    transition: color .14s;
   }
   .tab i { font-size: 14px; }
-  .tab.active {
-    background: #fff; color: #1c1917; font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.06);
+  .tab:hover { color: #4b5563; }
+  .tab.active { color: #1c1917; font-weight: 600; }
+  .tab.active::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+    height: 2px; background: #1c1917;
   }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* ── drop zone ────────────────────── */
+  /* ── drop zone: compact single row ── */
   .dropzone {
     background: #fff;
-    border: 2px dashed #d5dae0;
-    border-radius: 14px; padding: 46px 24px 40px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; margin-bottom: 16px; cursor: pointer; text-align: center;
-    transition: border-color .15s, background .15s, box-shadow .15s;
+    border: 1.5px dashed #d5dae0;
+    border-radius: 12px; padding: 20px 22px;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 16px; cursor: pointer; text-align: left;
+    transition: border-color .15s, background .15s;
   }
   .dropzone:hover, .dropzone.dragover {
     border-color: #5a8fc4; background: #f7fafd;
-    box-shadow: 0 4px 18px rgba(74,127,181,.10);
   }
-  .dropzone i { font-size: 42px; color: #b0b8c1; transition: color .15s, transform .15s; margin-bottom: 4px; }
-  .dropzone:hover i, .dropzone.dragover i { color: #4a7fb5; transform: translateY(-3px); }
-  .dropzone p { margin: 0; font-size: 15px; color: #1c1917; font-weight: 600; letter-spacing: -0.01em; }
-  .dropzone .hint { font-size: 12px; color: #9ca3af; font-weight: 400; margin-top: -2px; }
-  .dropzone .browse-link {
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
-    background: #1c1917; color: #fff; padding: 9px 18px; border-radius: 9px;
-    font-size: 12.5px; font-weight: 600; text-decoration: none;
-    transition: background .14s, transform .14s;
-  }
-  .dropzone:hover .browse-link { background: #292524; transform: translateY(-1px); }
+  .dropzone > i { font-size: 24px; color: #b0b8c1; flex-shrink: 0; transition: color .15s; }
+  .dropzone:hover > i, .dropzone.dragover > i { color: #4a7fb5; }
+  .dropzone p { margin: 0; font-size: 13.5px; color: #1c1917; font-weight: 600; letter-spacing: -0.01em; }
+  .dropzone .dz-link { color: #3b6ea5; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #b9d0e8; }
+  .dropzone .hint { font-size: 11.5px; color: #9ca3af; font-weight: 400; margin-top: 3px; }
 
   /* ── file card (after selection) ───────── */
   .file-card {
@@ -186,9 +185,9 @@
   }
   .file-card-icon {
     width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
-    background: #3b6ea5; display: flex; align-items: center; justify-content: center;
+    background: #f3f4f6; display: flex; align-items: center; justify-content: center;
   }
-  .file-card-icon i { font-size: 15px; color: #fff; }
+  .file-card-icon i { font-size: 15px; color: #6b7280; }
   .file-card-info { flex: 1; min-width: 0; }
   .file-card-name { font-size: 12.5px; font-weight: 600; color: #1c1917; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .file-card-size { font-size: 10.5px; color: #9ca3af; margin-top: 1px; }
@@ -213,7 +212,8 @@
     border: 1px solid #e5e7eb; box-shadow: none;
   }
   button.secondary:hover:not(:disabled) { background: #f5f5f5; border-color: #d1d5db; box-shadow: none; }
-  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  button:disabled { background: #f3f4f6; color: #b8bec6; box-shadow: none; cursor: not-allowed; }
+  button.secondary:disabled { background: #fff; border-color: #efefef; }
   input[type="text"] {
     width: 100%; padding: 10px 13px; border: 1px solid #e5e7eb; border-radius: 9px;
     background: rgba(255,255,255,.8); font-size: 13px; margin-bottom: 12px;
@@ -226,59 +226,69 @@
 
   /* ── results area ──────────────────── */
   .paper-title { font-size: 1.18rem; font-weight: 700; color: #1c1917; margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.3; }
+  .paper-authors { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .86rem; color: #6b7280; margin: -5px 0 10px; letter-spacing: -0.005em; }
+  .paper-authors i { font-size: 15px; color: #9ca3af; }
+  .paper-header { position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 0 8px; margin: 0 0 6px; border-bottom: 1px solid #f0f1f2; }
+  .paper-institutions { color: #9ca3af; font-weight: 400; }
+  .pub-badge { color: #6b7280; font-size: 12.5px; font-weight: 500; }
+  .tag-accent { color: #374151; }
+  .one-line-summary { border-left: 2px solid #1c1917; padding: 4px 0 4px 18px; margin: 20px 0 22px; }
+  .one-line-summary p { margin: 0; font-size: 1.1rem; font-weight: 500; color: #1c1917; line-height: 1.55; letter-spacing: -0.012em; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
+  .two-col .result-card { margin-bottom: 0; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+  .finding-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed #e9eaeb; }
+  .finding-item:last-child { border-bottom: none; }
+  .finding-num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: #9ca3af; padding-top: 3px; min-width: 20px; flex-shrink: 0; }
+  .finding-text { margin: 0; font-weight: 600; font-size: .94rem; color: #1c1917; }
+  .finding-detail { margin: 3px 0 0; font-size: .86rem; color: #6b7280; }
+  .results-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .results-table th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; padding: 6px 10px; border-bottom: 2px solid #e9eaeb; }
+  .results-table td { padding: 8px 10px; border-bottom: 1px solid #f0f1f2; color: #1c1917; }
+  .results-table td.rt-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .accordion { border-top: 1px solid #e9eaeb; margin-bottom: 0; overflow: hidden; }
+  .accordion summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 13px 0; font-weight: 600; font-size: .93rem; color: #1c1917; }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .acc-chevron { margin-left: auto; color: #9ca3af; transition: transform .2s; }
+  .accordion[open] .acc-chevron { transform: rotate(180deg); }
+  .acc-body { padding: 2px 0 16px; font-size: .92rem; }
+  .term-row { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed #eef0f2; }
+  .term-row:last-child { border-bottom: none; }
+  .term-name { font-weight: 700; color: #2c5282; min-width: 130px; flex-shrink: 0; }
+  .term-def { color: #4b5563; }
+  .confidence-note { font-size: .82rem; color: #8a8375; border-top: 1px solid #e9eaeb; padding: 12px 0 0; margin: 18px 0 16px; }
+
+  /* ── file card (after selection) ───────── */
   .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 18px; }
   .tag {
     display: inline-flex; align-items: center; gap: 4px;
     font-size: 10.5px; color: #6b7280; background: #f3f4f6;
     border: 1px solid #e5e7eb; padding: 3px 9px; border-radius: 6px; font-weight: 500;
   }
-  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
-  .pill.good { background: #e6f4de; color: #3d7a2e; }
-  .pill.bad  { background: #fdeee8; color: #b04040; }
-  .pill.neutral { background: #f3f4f6; color: #6b7280; }
 
-  /* ── stats block (premium style matching reference) ── */
+  /* ── stats ── */
   .stats {
-    background: #f5f5f5; border: 1px solid #e5e7eb; border-radius: 14px;
-    padding: 20px 22px 4px; margin: 0 0 20px;
-  }
-  .stats-label { font-size: 11.5px; color: #9ca3af; font-weight: 500; margin: 0 0 6px; letter-spacing: 0; }
-  .stats-big { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .stats-big .num { font-size: 52px; font-weight: 700; letter-spacing: -0.045em; color: #1c1917; line-height: 1; }
-  .statbar {
-    height: 26px; background: #e5e7eb; border-radius: 7px;
-    overflow: hidden; margin: 0 0 0;
-  }
-  .statbar .fill {
-    height: 100%; border-radius: 7px; background: #7cc86a;
-    transition: width .75s cubic-bezier(.16,1,.3,1);
+    border-top: 1px solid #1c1917;
+    padding: 2px 0 6px; margin: 22px 0 6px;
   }
   .stat-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 0; border-top: 1px solid #e9eaeb; font-size: 13px; color: #6b7280;
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 9px 0; font-size: 13px; color: #6b7280;
   }
   .stat-row .val { font-weight: 600; color: #1c1917; display: inline-flex; align-items: center; gap: 8px; }
 
   /* ── section cards (one-by-one, full width) ── */
-  .results { display: flex; flex-direction: column; gap: 12px; }
+  .results { display: flex; flex-direction: column; }
   .result-card {
-    background: #fff; border: 1px solid #e9eaeb; border-radius: 14px;
-    padding: 18px 22px 20px; transition: border-color .14s, box-shadow .14s;
+    border-top: 1px solid #e9eaeb;
+    padding: 18px 0 20px;
   }
-  .result-card:hover { border-color: #d1d5db; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
   .result-card.live-in { animation: cardLive .5s cubic-bezier(.16,1,.3,1) both; }
   @keyframes cardLive { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   .result-card-header {
-    font-size: 13.5px; font-weight: 700; margin: 0 0 12px;
-    display: flex; align-items: center; gap: 10px;
-    color: #1c1917; letter-spacing: -0.01em;
+    font-size: 11px; font-weight: 600; margin: 0 0 12px;
+    color: #6b7280; letter-spacing: .14em; text-transform: uppercase;
   }
-  .result-card-header .rc-icon {
-    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
-    background: #eef3fb; color: #3b6ea5; font-size: 15px;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .result-card-header .rc-title { flex: 1; }
   .result-card-header .copy-btn { cursor: pointer; color: #d1d5db; font-size: 14px; transition: color .13s; }
   .result-card-header .copy-btn:hover { color: #3b6ea5; }
   .result-card-body { font-size: 14px; color: #374151; line-height: 1.78; }
@@ -325,36 +335,30 @@
 
   /* ── live progress panel ───────────── */
   .progress-panel {
-    background: #fafafa; border: 1px solid #e9eaeb; border-radius: 14px;
-    padding: 20px 22px 18px; margin-bottom: 18px;
+    padding: 2px 0 16px; margin-bottom: 8px;
   }
   .progress-head {
     display: flex; justify-content: space-between; align-items: baseline;
     gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
   }
-  .progress-title { font-size: 14.5px; font-weight: 700; color: #1c1917; letter-spacing: -0.01em; }
-  .progress-title .dots::after { content: ''; animation: dots 1.4s steps(1, end) infinite; }
-  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+  .progress-title { font-size: 13px; font-weight: 500; color: #374151; letter-spacing: -0.005em; }
   .progress-meta { font-size: 12px; color: #9ca3af; display: flex; gap: 14px; white-space: nowrap; }
   .progress-meta #pg-count { font-weight: 600; color: #3b6ea5; }
-  .pg-bar { height: 8px; background: #e9eaeb; border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .pg-bar { height: 2px; background: #e9eaeb; overflow: hidden; margin-bottom: 14px; }
   .pg-bar .fill {
-    height: 100%; width: 0%; border-radius: 6px;
-    background: linear-gradient(90deg, #4a7fb5, #7cc86a);
+    height: 100%; width: 0%;
+    background: #1c1917;
     transition: width .5s cubic-bezier(.16,1,.3,1);
   }
-  .pstage-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .result-card-body .empty-note, .result-card-body.empty-note { color: #9ca3af; font-style: italic; font-size: .92rem; }
+  .pstage-row { display: flex; gap: 18px; flex-wrap: wrap; }
   .pstage {
-    display: inline-flex; align-items: center; gap: 7px;
-    font-size: 12px; font-weight: 500; color: #b0b8c1;
-    background: #fff; border: 1px solid #e5e7eb; border-radius: 999px; padding: 6px 13px;
-    transition: color .25s, border-color .25s, background .25s;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; font-weight: 500; color: #b0b8c1;
+    transition: color .25s;
   }
-  .pstage i { font-size: 13px; }
-  .pstage.active { color: #1e3858; border-color: #b8d0e8; background: #eef3fb; }
-  .pstage.active i { color: #3b6ea5; animation: spin 1.2s linear infinite; }
-  .pstage.done { color: #4d9441; border-color: #cfe6c6; background: #f2f9ef; }
-  .pstage.done i { animation: none; }
+  .pstage.active { color: #1c1917; }
+  .pstage.done { color: #c6c6c6; text-decoration: line-through; }
   .load-sections {
     margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px;
   }
@@ -365,10 +369,98 @@
   .error-box { background: #fdeee8; color: #b04040; padding: 12px 16px; border-radius: 10px; margin: 12px 0; font-size: 13px; border: 1px solid #f5c8b8; }
   .empty-state {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 180px; gap: 10px; text-align: center; color: #b0b8c1; font-size: 13px; padding: 32px 24px;
-    background: #fafafa; border: 1px dashed #e5e7eb; border-radius: 14px;
+    min-height: 140px; gap: 6px; text-align: center; color: #b0b8c1; font-size: 13px; padding: 32px 24px;
   }
-  .empty-icon { font-size: 34px; color: #d4d7dc; margin-bottom: 4px; }
+
+  /* ── focus mode (dashboard expands to full screen) ── */
+  #focus-topbar {
+    display: none; position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 70;
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px;
+  }
+  body.screen #focus-topbar { display: flex; }
+  body.dark #focus-topbar { background: #0a0a0a; border-color: #241f1b; }
+  .focus-crumb {
+    font-size: 14px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .focus-crumb .brand { color: #1c1917; font-weight: 600; }
+  body.dark .focus-crumb .brand { color: #e7e5e4; }
+  .focus-crumb #focus-crumb-title { color: #6b7280; font-weight: 400; }
+  #focus-exit {
+    flex-shrink: 0; background: none; border: 1px solid #e5e7eb; color: #374151;
+    padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px; transition: background .15s;
+  }
+  #focus-exit:hover:not(:disabled) { background: #f3f4f6; }
+  #focus-exit i { font-size: 15px; }
+  body.dark #focus-exit { background: none; color: #9ca3af; border-color: #3d3830; }
+  body.dark #focus-exit:hover:not(:disabled) { background: #1c1917; }
+  /* ── output screen: a separate full page the app navigates to on Summarize ── */
+  #output-screen {
+    display: none; position: fixed; top: 52px; left: 0; right: 0; bottom: 0; z-index: 60;
+    background: #fafaf9; overflow: hidden;
+  }
+  body.dark #output-screen { background: #141210; }
+  body.screen #output-screen {
+    display: block;
+    animation: screenIn .35s cubic-bezier(.16,1,.3,1) both;
+  }
+  @keyframes screenIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  #output-scroll { height: 100%; overflow-y: auto; padding: 0 32px 56px; scrollbar-width: thin; }
+  body.screen .reading-room { gap: 26px; }
+  body.screen .page-rail { width: min(38%, 500px); position: sticky; top: 0; }
+  @media (max-width: 860px) { body.screen .page-rail { width: 100%; } }
+
+  /* ── highlighted passages in the source paper ── */
+  mark.paper-hl { background: #bfdbfe; color: inherit; border-radius: 2px; padding: 0 1px; }
+  body.dark mark.paper-hl { background: #2c4a6e; color: #cfe2f7; }
+
+  /* ── pdf viewer pane (left side in focus mode) ── */
+  .pdf-pane {
+    background: #f7f8fa; border: 1px solid #e9eaeb; border-radius: 10px;
+    padding: 16px; overflow-y: auto; scrollbar-width: thin;
+  }
+  .pdf-sources-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .pdf-sources-label {
+    font-size: 14.5px; font-weight: 700; color: #1c1917;
+    display: inline-flex; align-items: center; gap: 8px; letter-spacing: -0.01em;
+  }
+  .pdf-sources-label i { font-size: 17px; color: #6b7280; }
+  .pdf-sources-label .count { color: #9ca3af; font-weight: 500; }
+  .pdf-file-chip {
+    display: flex; align-items: center; gap: 9px; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 8px; padding: 10px 13px; margin-bottom: 14px;
+    font-size: 13.5px; font-weight: 500; color: #1c1917;
+  }
+  .pdf-file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pdf-file-chip i { color: #9ca3af; flex-shrink: 0; }
+  .pdf-page-wrap { position: relative; margin-bottom: 14px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .pdf-page-wrap.pdf-page-loading { min-height: 380px; }
+  .pdf-page-wrap canvas { display: block; width: 100%; height: auto; }
+  .pdf-hl, .pdf-flash { position: absolute; border-radius: 2px; pointer-events: none; mix-blend-mode: multiply; }
+  .pdf-hl { background: rgba(96, 165, 250, .35); }
+  .pdf-flash { background: rgba(250, 204, 21, .5); }
+  body.dark .pdf-pane { background: #17140f; border-color: #2c2822; }
+  body.dark .pdf-page-wrap { box-shadow: 0 1px 4px rgba(0,0,0,.6); }
+  body.dark .pdf-sources-label { color: #e7e5e4; }
+  body.dark .pdf-file-chip { background: #1e1a17; border-color: #3d3830; color: #e7e5e4; }
+  body.dark .pdf-hl { background: rgba(59, 130, 246, .35); }
+  body.dark .pdf-flash { background: rgba(234, 179, 8, .45); }
+
+  body.screen .reading-room.has-pdf {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 26px; align-items: stretch; /* stretch (not start) so the sticky paper-header has travel room */
+  }
+  body.screen .reading-room.has-pdf .pdf-pane {
+    position: sticky; top: 0; max-height: calc(100vh - 76px); max-height: calc(100dvh - 76px);
+  }
+  @media (max-width: 1000px) {
+    body.screen .reading-room.has-pdf { grid-template-columns: 1fr; }
+    body.screen .reading-room.has-pdf .pdf-pane { position: static; max-height: 62vh; }
+  }
 
   /* ── card footer ──────────────────── */
   .card-footer {
@@ -378,16 +470,31 @@
   }
   .card-footer-brand { display: flex; align-items: center; gap: 5px; color: #b0b8c1; font-size: 11px; }
   .card-footer-brand i { font-size: 12px; }
-  .recent-wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .recent-label { font-size: 11px; color: #b8bec6; font-weight: 500; white-space: nowrap; }
-  .recent-item {
-    font-size: 11px; color: #6b7280; background: #f3f4f6;
-    border-radius: 6px; padding: 3px 9px;
-    display: inline-flex; align-items: center; gap: 4px;
-    transition: background .13s, color .13s;
+  #results-area:empty { display: none; }
+  .recent-head {
+    font-size: 11px; font-weight: 600; color: #6b7280;
+    letter-spacing: .14em; text-transform: uppercase; margin-bottom: 10px;
   }
-  .recent-item:hover { background: #e4edf8; color: #3b6ea5; }
-  .recent-item i { font-size: 10px; color: #b8bec6; }
+  .recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .recent-card {
+    display: block; width: 100%; box-sizing: border-box;
+    background: #fff; border: 1px solid #e9eaeb; border-radius: 10px;
+    padding: 13px 15px; cursor: pointer; text-align: left;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+    font: inherit;
+  }
+  .recent-card:hover { border-color: #3b6ea5; box-shadow: 0 2px 10px rgba(59, 110, 165, .12); transform: translateY(-1px); }
+  .recent-card .rt {
+    display: block; font-size: 13px; font-weight: 600; color: #1c1917; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .recent-card .rm {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: #9ca3af; margin-top: 8px;
+  }
+  .recent-card .rm i { font-size: 12px; flex-shrink: 0; }
+  .recent-card .rm span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-card .rm .rm-time { margin-left: auto; flex-shrink: 0; overflow: visible; }
 
   /* ── animations ────────────────────── */
   .result-card { animation: cardRise .42s cubic-bezier(.16,1,.3,1) backwards; }
@@ -403,8 +510,8 @@
     .card-head { padding: 12px 16px 11px; }
     .workflow { padding: 8px 2px 10px; }
     .input-panel { padding: 18px 16px 20px; }
-    .dropzone { padding: 34px 16px 30px; }
-    .dropzone i { font-size: 34px; }
+    .dropzone { padding: 16px 18px; gap: 12px; }
+    .dropzone > i { font-size: 20px; }
     .result-card { padding: 16px 16px 18px; }
     .progress-panel { padding: 16px 16px 14px; }
     .load-sections { grid-template-columns: 1fr; }
@@ -456,22 +563,25 @@
   body.dark .card-head { background: #161412; border-color: #2c2822; }
   body.dark .card-head-title { color: #4b5563; }
   body.dark .card-head-title i { color: #3d3830; }
-  body.dark .usage-chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
-  body.dark .usage-chip.warn { background: #3d2a1e; color: #d48a40; border-color: #5a3a20; }
+  body.dark .usage-chip { color: #6b7280; }
+  body.dark .usage-chip.warn { color: #d48a40; }
   body.dark .step-label { color: #4b5563; }
   body.dark .step-num { background: #e7e5e4; color: #1c1917; }
   body.dark .step-line { background: #2c2822; }
   body.dark .panel-box { background: #161412; border-color: #2c2822; }
-  body.dark .mode-switch { background: #28231e; }
+  body.dark .mode-switch { border-bottom-color: #2c2822; }
   body.dark .tab { color: #4b5563; }
-  body.dark .tab.active { background: #332d28; color: #e7e5e4; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  body.dark .tab:hover { color: #78716c; }
+  body.dark .tab.active { color: #e7e5e4; }
+  body.dark .tab.active::after { background: #e7e5e4; }
   body.dark .dropzone { background: rgba(255,255,255,.03); border-color: #3d3830; }
   body.dark .dropzone:hover, body.dark .dropzone.dragover { background: rgba(255,255,255,.06); border-color: #5a7fa8; }
   body.dark .dropzone p { color: #e7e5e4; }
+  body.dark .dropzone .dz-link { color: #8db8e8; text-decoration-color: #33506e; }
   body.dark .dropzone .hint { color: #4b5563; }
-  body.dark .dropzone .browse-link { background: #e7e5e4; color: #1c1917; }
-  body.dark .dropzone:hover .browse-link { background: #fff; }
   body.dark .file-card { background: #28231e; border-color: #3d3830; box-shadow: none; }
+  body.dark .file-card-icon { background: #28231e; }
+  body.dark .file-card-icon i { color: #9ca3af; }
   body.dark .file-card-name { color: #e7e5e4; }
   body.dark .file-card-size { color: #4b5563; }
   body.dark .file-card-remove { color: #3d3830; }
@@ -487,18 +597,33 @@
   body.dark input[type="text"] { background: #1e1a17; border-color: #3d3830; color: #e7e5e4; }
   body.dark input[type="text"]::placeholder { color: #3d3830; }
   body.dark .paper-title { color: #e7e5e4; }
+  body.dark .paper-header { background: #141210; border-color: #241f1b; }
+  body.dark .paper-institutions { color: #6b7280; }
+  body.dark .pub-badge { color: #6b7280; }
+  body.dark .tag-accent { color: #9ca3af; }
+  body.dark .one-line-summary { border-left-color: #e7e5e4; }
+  body.dark .one-line-summary p { color: #e7e5e4; }
+  body.dark .finding-text { color: #e7e5e4; }
+  body.dark .finding-num { color: #4b5563; }
+  body.dark .finding-item { border-color: #2c2822; }
+  body.dark .results-table th { color: #6b7280; border-color: #2c2822; }
+  body.dark .results-table td { color: #e7e5e4; border-color: #241f1b; }
+  body.dark .accordion { border-top-color: #2c2822; }
+  body.dark .accordion summary { color: #e7e5e4; }
+  body.dark .term-name { color: #8db8e8; }
+  body.dark .term-def { color: #9ca3af; }
+  body.dark .term-row { border-color: #241f1b; }
+  body.dark .confidence-note { color: #78716c; border-top-color: #2c2822; }
+
+  body.dark .result-card-body.empty-note { color: #6b7280; }
+  body.dark .paper-authors { color: #9ca3af; }
+  body.dark .paper-authors i { color: #6b7280; }
   body.dark .tag { background: #28231e; border-color: #3d3830; color: #6b7280; }
-  body.dark .stats { background: #161412; border-color: #2c2822; }
-  body.dark .stats-label { color: #4b5563; }
-  body.dark .stats-big .num { color: #e7e5e4; }
-  body.dark .statbar { background: #28231e; }
-  body.dark .statbar .fill { background: #5a9448; }
-  body.dark .stat-row { border-color: #2c2822; color: #6b7280; }
+  body.dark .stats { border-top-color: #e7e5e4; }
+  body.dark .stat-row { color: #6b7280; }
   body.dark .stat-row .val { color: #c8c4be; }
-  body.dark .result-card { background: #1e1a17; border-color: #2c2822; }
-  body.dark .result-card:hover { border-color: #3d3830; box-shadow: none; }
-  body.dark .result-card-header { color: #e7e5e4; }
-  body.dark .result-card-header .rc-icon { background: #1e3048; color: #6b9fd4; }
+  body.dark .result-card { border-top-color: #241f1b; }
+  body.dark .result-card-header { color: #78716c; }
   body.dark .result-card-header .copy-btn { color: #3d3830; }
   body.dark .result-card-header .copy-btn:hover { color: #6b9fd4; }
   body.dark .result-card-body { color: #9ca3af; }
@@ -515,28 +640,24 @@
   body.dark .chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
   body.dark .chip:hover { background: #332d28; }
   body.dark .chat-typing span { background: #3d3830; }
-  body.dark .progress-panel { background: #161412; border-color: #2c2822; }
-  body.dark .progress-title { color: #e7e5e4; }
+  body.dark .progress-title { color: #c8c4be; }
   body.dark .progress-meta { color: #4b5563; }
   body.dark .progress-meta #pg-count { color: #6b9fd4; }
   body.dark .pg-bar { background: #28231e; }
-  body.dark .pstage { background: #1c1917; border-color: #3d3830; color: #4b5563; }
-  body.dark .pstage.active { background: #1e3048; border-color: #2c4a6e; color: #8fb8e0; }
-  body.dark .pstage.active i { color: #6b9fd4; }
-  body.dark .pstage.done { background: #1a3018; border-color: #2c4a28; color: #5a9448; }
+  body.dark .pg-bar .fill { background: #e7e5e4; }
+  body.dark .pstage { color: #4b5563; }
+  body.dark .pstage.active { color: #e7e5e4; }
+  body.dark .pstage.done { color: #3a3530; }
   body.dark .load-section { color: #4b5563; }
   body.dark .load-section.done { color: #5a9448; }
   body.dark .error-box { background: #3a1818; color: #e07070; border-color: #5a2a2a; }
-  body.dark .empty-state { color: #3d3830; background: #161412; border-color: #2c2822; }
-  body.dark .empty-icon { color: #2c2822; }
+  body.dark .empty-state { color: #3d3830; }
   body.dark .card-footer { background: #161412; border-color: #2c2822; }
   body.dark .card-footer-brand { color: #3d3830; }
-  body.dark .recent-label { color: #3d3830; }
-  body.dark .recent-item { background: #28231e; color: #4b5563; }
-  body.dark .recent-item:hover { background: #1e3048; color: #6b9fd4; }
-  body.dark .pill.good { background: #1a3018; color: #5a9448; }
-  body.dark .pill.bad  { background: #3a1818; color: #e07070; }
-  body.dark .pill.neutral { background: #28231e; color: #78716c; }
+  body.dark .recent-card { background: #1e1a17; border-color: #2c2822; }
+  body.dark .recent-card:hover { border-color: #6b9fd4; box-shadow: 0 2px 10px rgba(0, 0, 0, .5); }
+  body.dark .recent-card .rt { color: #e7e5e4; }
+  body.dark .recent-card .rm { color: #6b7280; }
 
   /* ── credit footer (transparent, blends into the sky) ── */
   .scene-footer {
@@ -568,13 +689,92 @@
     .scene-credit { font-size: 10.5px; }
   }
 
+  /* ════════════════════════════════════════════════════════
+     Citation tabs & page rail — structural styles
+     Original palette: blue accents in light, black surfaces in dark
+     ════════════════════════════════════════════════════════ */
+  /* citation tabs */
+  .cite-tab {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0;
+    color: #2c5282; background: #eef3fb;
+    border: 1px solid #c9dcf2; border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 7px; margin-left: 8px;
+    cursor: pointer; vertical-align: middle; white-space: nowrap;
+    transition: background .15s, transform .15s, box-shadow .15s;
+  }
+  .cite-tab i { font-size: 12px; }
+  button.cite-tab:hover { background: #dce9f7; transform: translateY(-1px); box-shadow: 0 2px 6px rgba(59,110,165,.25); }
+  .cite-tab.unverified {
+    color: #9ca3af; background: #f4f4f4; border-color: #e5e5e5;
+    cursor: help; font-style: italic; font-weight: 600;
+  }
+  .finding-unverified .finding-text { color: #6b7280; }
+  .cite-mark { background: #bfdbfe; color: #1c1917; border-radius: 3px; padding: 0 2px; box-shadow: 0 0 0 3px rgba(147,197,253,.45); }
+
+  /* split-pane reading room */
+  .reading-room { display: flex; gap: 18px; align-items: flex-start; }
+  .page-rail {
+    display: none; width: 320px; flex-shrink: 0;
+    position: sticky; top: 12px;
+    max-height: calc(100vh - 40px); overflow-y: auto;
+    background: #f8fbfe; border: 1px solid #e5e7eb; border-radius: 14px;
+    padding: 14px; scrollbar-width: thin;
+  }
+  .reading-room.rail-open .page-rail { display: block; }
+  .rail-head {
+    display: flex; align-items: center; gap: 7px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+    color: #4b5563; margin-bottom: 12px; padding: 2px 0 9px;
+    border-bottom: 1px dashed #d6d9de;
+    position: sticky; top: -14px; background: #f8fbfe; z-index: 2;
+  }
+  .rail-head i { color: #3b6ea5; }
+  .rail-count { margin-left: auto; background: #eef3fb; color: #2c5282; border-radius: 999px; padding: 1px 8px; }
+  .rail-page { margin-bottom: 14px; }
+  .rail-page-label {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10.5px; font-weight: 700; color: #2c5282;
+    background: #eef3fb; border: 1px solid #c9dcf2;
+    display: inline-block; padding: 1px 8px; border-radius: 4px; margin-bottom: 6px;
+  }
+  .page-text { font-size: 11.5px; line-height: 1.7; color: #4b5563; white-space: pre-wrap; word-break: break-word; }
+  .summary-pane { flex: 1; min-width: 0; }
+  @media (max-width: 900px) {
+    .reading-room { flex-direction: column; }
+    .page-rail { position: static; width: 100%; max-height: 420px; order: 2; }
+  }
+
+  /* ── dark mode additions for citation tabs & page rail (black) ── */
+  body.dark .cite-tab { color: #8db8e8; background: #1a2330; border-color: #2c3a4d; }
+  body.dark button.cite-tab:hover { background: #1e3048; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+  body.dark .cite-tab.unverified { color: #6b7280; background: #28231e; border-color: #3d3830; }
+  body.dark .cite-mark { background: #2c4a6e; color: #cfe2f7; box-shadow: 0 0 0 3px rgba(44,74,110,.45); }
+  body.dark .page-rail { background: #17140f; border-color: #2c2822; }
+  body.dark .rail-head { color: #6b7280; border-bottom-color: #2c2822; background: #17140f; }
+  body.dark .rail-head i { color: #6b9fd4; }
+  body.dark .rail-count { background: #1a2330; color: #8db8e8; }
+  body.dark .rail-page-label { color: #8db8e8; background: #1a2330; border-color: #2c3a4d; }
+  body.dark .page-text { color: #a8a294;
+  }
 </style>
 </head>
 <body>
 
+<!-- fixed controls live outside .sky: position:fixed inside an overflow:hidden
+     ancestor is unreliable in WebKit and makes the buttons scroll away -->
+<button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
+<div id="focus-topbar">
+  <span class="focus-crumb"><span class="brand">Summarizer</span><span> &nbsp;/&nbsp; </span><span id="focus-crumb-title"></span></span>
+  <button id="focus-exit" onclick="exitFocus()" aria-label="Back to home" title="Back to home (Esc)"><i class="ti ti-arrow-left"></i>Back</button>
+</div>
+
+<div id="output-screen"><div id="output-scroll"></div></div>
+
 <div class="sky">
   <div class="sky-night" aria-hidden="true"></div>
-  <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
   <div class="stars" aria-hidden="true"></div>
 
   <!-- hero -->
@@ -608,7 +808,7 @@
 
       <!-- single-column workflow -->
       <div class="workflow">
-        <div class="step-label"><span class="step-num">1</span>Add your paper<span class="step-line"></span></div>
+        <div class="step-label"><span>Add your paper</span><span class="step-line"></span></div>
         <div class="input-panel panel-box">
           <div class="mode-switch">
             <div class="tab active" onclick="switchTab('pdf')"><i class="ti ti-file-upload"></i>Upload PDF</div>
@@ -617,16 +817,17 @@
 
           <div id="tab-pdf" class="tab-content active">
             <div id="dropzone" class="dropzone" onclick="document.getElementById('file-input').click()">
-              <i class="ti ti-cloud-upload"></i>
-              <p>Drag &amp; drop your paper here</p>
-              <p class="hint">PDF only &middot; up to 200 MB &middot; summary in under a minute</p>
-              <span class="browse-link"><i class="ti ti-folder-open"></i>Choose PDF</span>
+              <i class="ti ti-file-upload"></i>
+              <div class="dz-text">
+                <p>Drop your PDF here, or <span class="dz-link">browse files</span></p>
+                <p class="hint">PDF only &middot; up to 200 MB &middot; summary in under a minute</p>
+              </div>
             </div>
             <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="onFileSelected()">
             <div id="filename" class="filename"></div>
             <div id="file-card-wrap"></div>
             <button id="summarize-pdf-btn" onclick="summarizePdf()" disabled style="width:100%;justify-content:center;padding:12px;">
-              <i class="ti ti-sparkles"></i>Summarize paper
+              Summarize paper
             </button>
           </div>
 
@@ -634,7 +835,7 @@
             <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
             <div style="display:flex; gap:8px;">
               <button onclick="summarizeDoi()" style="flex:1;justify-content:center;padding:12px;">
-                <i class="ti ti-sparkles"></i>Summarize paper
+                Summarize paper
               </button>
               <button class="secondary" onclick="fillExampleDoi()" title="Fill with an example DOI">
                 <i class="ti ti-wand"></i>
@@ -643,23 +844,13 @@
           </div>
         </div>
 
-        <div class="step-label" style="margin-top:30px;"><span class="step-num">2</span>Your summary<span class="step-line"></span></div>
-        <div id="results-area">
-          <div class="empty-state">
-            <i class="ti ti-file-description empty-icon"></i>
-            <span>Upload a PDF or paste a DOI above — your structured summary will appear here, section by section</span>
-          </div>
-        </div>
+        <div id="results-area"></div>
       </div><!-- /workflow -->
 
       <div class="card-footer">
-        <div class="card-footer-brand">
-          <i class="ti ti-cpu"></i>
-          <span>FastAPI &middot; gpt-oss-120b via Groq</span>
-        </div>
-        <div class="recent-wrap">
-          <span class="recent-label">Recent:</span>
-          <span id="recent-list"><span style="color:#b8bec6;font-size:11px">None yet</span></span>
+        <div class="recent-block" id="recent-block" hidden>
+          <div class="recent-head">Recent papers</div>
+          <div id="recent-list" class="recent-grid"></div>
         </div>
       </div>
     </div><!-- /app-card -->
@@ -684,19 +875,6 @@ let currentPaperText = "";
 let chatHistory = [];
 let recentPapers = [];
 let loadTimer = null;
-
-const SECTION_META = {
-  summary:       { icon: 'ti-file-text', label: 'Summary' },
-  methodology:   { icon: 'ti-flask',     label: 'Methodology' },
-  research_gaps: { icon: 'ti-puzzle',    label: 'Research gaps' },
-  findings:      { icon: 'ti-bulb',      label: 'Findings' },
-  future_work:   { icon: 'ti-road',      label: 'Future work' },
-  key_stats:     { icon: 'ti-chart-bar', label: 'Key statistics' },
-};
-// display order for the final results (streaming may complete them in any order)
-const SECTION_DISPLAY_ORDER = ['summary', 'findings', 'key_stats', 'methodology', 'future_work', 'research_gaps'];
-let streamStats = { done: 0, total: 6 };
-
 function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -722,6 +900,7 @@ function setFile(file) {
     return;
   }
   selectedFile = file;
+  window.selectedPdfFile = file;
   const sizeKb = file.size < 1024 * 1024
     ? (file.size / 1024).toFixed(0) + ' KB'
     : (file.size / 1024 / 1024).toFixed(1) + ' MB';
@@ -791,54 +970,92 @@ function fillMarquee() {
   track.style.animationDuration = Math.round(track.scrollWidth / 2 / 28) + 's';
 }
 
+const resultsHome = document.getElementById('results-area').parentElement;
+function enterFocus() {
+  // navigate to the output screen: move the results/output DOM into it
+  const ra = document.getElementById('results-area');
+  const pane = document.getElementById('output-scroll');
+  if (ra && pane && ra.parentElement !== pane) pane.appendChild(ra);
+  document.body.classList.add('screen');
+  if (pane) pane.scrollTop = 0;
+}
+
+function exitFocus() {
+  // go back home: return the output DOM to the dashboard…
+  document.body.classList.remove('screen');
+  const ra = document.getElementById('results-area');
+  if (ra && resultsHome && ra.parentElement !== resultsHome) resultsHome.appendChild(ra);
+  // …then start fresh — no stale PDF/summary left sitting on the start screen
+  if (ra) ra.innerHTML = '';
+  window.pdfDoc = null;
+  const crumb = document.getElementById('focus-crumb-title');
+  if (crumb) crumb.textContent = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') exitFocus(); });
+
 function showLoading() {
   const t0 = Date.now();
-  streamStats = { done: 0, total: Object.keys(SECTION_META).length };
-  const rows = Object.keys(SECTION_META).map(k =>
-    `<div class="load-section" id="ls-${k}"><i class="ti ti-circle"></i><span>${SECTION_META[k].label}</span></div>`
-  ).join('');
+  enterFocus();
+  const crumb = document.getElementById('focus-crumb-title');
+  if (crumb) crumb.textContent = 'Analyzing paper\u2026';
   document.getElementById('results-area').innerHTML = `
     <div class="progress-panel">
       <div class="progress-head">
-        <div class="progress-title" id="pg-title">Analyzing your paper<span class="dots"></span></div>
+        <div class="progress-title" id="pg-title">Extracting paper text</div>
         <div class="progress-meta">
-          <span id="pg-elapsed">0s elapsed</span>
-          <span id="pg-count">0 / ${streamStats.total} sections</span>
+          <span id="pg-elapsed">0s</span>
         </div>
       </div>
       <div class="pg-bar"><div class="fill" id="pg-fill"></div></div>
       <div class="pstage-row">
-        <span class="pstage active" id="pstage-read"><i class="ti ti-loader-2"></i>Reading paper</span>
-        <span class="pstage" id="pstage-write"><i class="ti ti-typewriter"></i>Writing summary</span>
-        <span class="pstage" id="pstage-done"><i class="ti ti-circle-check"></i>Done</span>
+        <span class="pstage active" id="pstage-read">01 Reading paper</span>
+        <span class="pstage" id="pstage-write">02 Writing summary</span>
+        <span class="pstage" id="pstage-done">03 Done</span>
       </div>
-      <div class="load-sections" id="load-sections" style="display:none">${rows}</div>
     </div>
     <div class="results" id="live-results"></div>`;
+  // Lightweight ticker: elapsed time only. Every bar movement and status
+  // change is driven by real backend events (meta / stage / done).
   loadTimer = setInterval(() => {
     const el = document.getElementById('pg-elapsed');
-    if (el) el.textContent = `${Math.round((Date.now() - t0) / 1000)}s elapsed`;
+    if (el) el.textContent = `${Math.round((Date.now() - t0) / 1000)}s`;
   }, 1000);
-  // bring the progress panel into view so the user sees it start immediately
-  setTimeout(() => {
-    document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 150);
+  // the output screen shows the progress panel from its top
+  enterFocus();
 }
 
-function stageWriting() {
+function stageExtracted() {
+  // backend finished extracting/preparing the paper text (meta event)
   const read = document.getElementById('pstage-read');
   if (read) {
     read.classList.remove('active');
     read.classList.add('done');
-    const i = read.querySelector('i');
-    if (i) i.className = 'ti ti-circle-check';
+  }
+}
+
+function stageWriting(model, truncated) {
+  // backend is calling the model (stage: generating event)
+  const read = document.getElementById('pstage-read');
+  if (read) {
+    read.classList.remove('active');
+    read.classList.add('done');
   }
   const write = document.getElementById('pstage-write');
   if (write) write.classList.add('active');
-  const ls = document.getElementById('load-sections');
-  if (ls) ls.style.display = 'grid';
   const title = document.getElementById('pg-title');
-  if (title) title.innerHTML = 'Writing your summary<span class="dots"></span>';
+  if (title) {
+    const bits = [];
+    if (model) bits.push(model);
+    if (truncated) bits.push('long paper — truncated context');
+    title.textContent = bits.length ? `Writing summary · ${bits.join(' · ')}` : 'Writing summary';
+  }
+  const fill = document.getElementById('pg-fill');
+  if (fill) {
+    // slow, honest crawl while the single model call runs; the real jump to
+    // 100% happens on the done event
+    fill.style.transition = 'width 24s linear';
+    fill.style.width = '85%';
+  }
 }
 
 function stageDone() {
@@ -846,39 +1063,21 @@ function stageDone() {
   if (write) {
     write.classList.remove('active');
     write.classList.add('done');
-    const i = write.querySelector('i');
-    if (i) i.className = 'ti ti-circle-check';
   }
   const done = document.getElementById('pstage-done');
-  if (done) {
-    done.classList.add('done');
-    const i = done.querySelector('i');
-    if (i) i.className = 'ti ti-circle-check';
-  }
+  if (done) done.classList.add('done');
   const title = document.getElementById('pg-title');
   if (title) title.textContent = 'Summary ready';
-}
-
-function markSectionDone(section, content) {
-  streamStats.done++;
-  const row = document.getElementById('ls-' + section);
-  if (row) {
-    row.classList.add('done');
-    const i = row.querySelector('i');
-    if (i) i.className = 'ti ti-circle-check';
-  }
-  const count = document.getElementById('pg-count');
-  if (count) count.textContent = `${streamStats.done} / ${streamStats.total} sections`;
   const fill = document.getElementById('pg-fill');
-  if (fill) fill.style.width = Math.round((streamStats.done / streamStats.total) * 100) + '%';
-  // render the finished section immediately, one by one
-  if (content) {
-    const live = document.getElementById('live-results');
-    if (live) live.insertAdjacentHTML('beforeend', card(section, content, true));
+  if (fill) {
+    fill.style.transition = 'width .25s ease';
+    fill.style.width = '100%';
   }
 }
 
-function clearLoading() { if (loadTimer) { clearInterval(loadTimer); loadTimer = null; } }
+function clearLoading() {
+  if (loadTimer) { clearInterval(loadTimer); loadTimer = null; }
+}
 
 function showError(msg) {
   clearLoading();
@@ -905,7 +1104,7 @@ async function streamSummarize(formData) {
   const res = await postForm('/summarize/stream', formData);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buf = '', result = null, streamError = null;
+  let buf = '', result = null, streamError = null, streamMeta = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -917,9 +1116,9 @@ async function streamSummarize(formData) {
       const line = chunk.split('\n').find(l => l.startsWith('data: '));
       if (!line) continue;
       const ev = JSON.parse(line.slice(6));
-      if (ev.type === 'meta') stageWriting();
-      else if (ev.type === 'section_done') markSectionDone(ev.section, ev.content);
-      else if (ev.type === 'done') result = ev.result;
+      if (ev.type === 'meta') { streamMeta = ev.meta || null; stageExtracted(); }
+      else if (ev.type === 'stage' && ev.stage === 'generating') stageWriting(ev.model, ev.truncated);
+      else if (ev.type === 'done') result = streamMeta ? { ...streamMeta, ...ev.result } : ev.result;
       else if (ev.type === 'error') streamError = ev.detail;
     }
   }
@@ -952,6 +1151,7 @@ async function runSummarize(formData, sourceLabel) {
       return;
     }
     // Streaming unavailable → fall back to the plain endpoint
+    stageWriting(); // no events on this path — show the writing phase while it runs
     try {
       data = await plainSummarize(formData);
     } catch (e2) {
@@ -962,7 +1162,7 @@ async function runSummarize(formData, sourceLabel) {
     }
   }
   renderResults(data);
-  addRecent(data.title || sourceLabel, formData.get('doi') || null);
+  addRecent(data.title || sourceLabel, formData.get('doi') || null, data);
   setBusy(false);
   refreshUsage();
   if (!data.cached) pixelCelebration();
@@ -989,11 +1189,26 @@ function setBusy(busy) {
   if (doiBtn) doiBtn.disabled = busy;
 }
 
-function addRecent(title, doi) {
-  recentPapers.unshift(doi ? { t: title, doi } : { t: title });
-  recentPapers = recentPapers.slice(0, 5);
-  try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers)); } catch (e) {}
+function addRecent(title, doi, data) {
+  recentPapers.unshift({ t: title, doi: doi || null, file: selectedFile ? selectedFile.name : null, ts: Date.now(), data: data || null });
+  recentPapers = recentPapers.slice(0, 6);
+  persistRecent();
   renderRecent();
+}
+
+function persistRecent() {
+  try {
+    localStorage.setItem('recent_papers', JSON.stringify(recentPapers));
+  } catch (e) {
+    // storage full: shed paper payloads from the oldest entries until it fits
+    for (let i = recentPapers.length - 1; i >= 0; i--) {
+      if (recentPapers[i].data) {
+        recentPapers[i] = { t: recentPapers[i].t, doi: recentPapers[i].doi, file: recentPapers[i].file, ts: recentPapers[i].ts };
+        try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers)); return; } catch (e2) {}
+      }
+    }
+    try { localStorage.setItem('recent_papers', JSON.stringify(recentPapers.slice(0, 2))); } catch (e3) {}
+  }
 }
 
 function loadRecent() {
@@ -1004,16 +1219,56 @@ function loadRecent() {
   renderRecent();
 }
 
+function _timeAgo(ts) {
+  const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.round(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.round(h / 24) + 'd ago';
+}
+
 function renderRecent() {
-  document.getElementById('recent-list').innerHTML = recentPapers.length
-    ? recentPapers
-        .map(p => {
-          const label = escapeHtml(String(p.t).slice(0, 34)) + (String(p.t).length > 34 ? '...' : '');
-          const clickable = p.doi ? ` style="cursor:pointer" title="Summarize this DOI again" onclick="rerunDoi(this)" data-doi="${escapeHtml(p.doi)}"` : '';
-          return `<span class="recent-item"${clickable}><i class="ti ti-file-text"></i>${label}</span>`;
-        })
-        .join('')
-    : '<span style="color:#b0b6bd">None yet</span>';
+  const block = document.getElementById('recent-block');
+  const list = document.getElementById('recent-list');
+  if (!block || !list) return;
+  if (!recentPapers.length) { block.hidden = true; list.innerHTML = ''; return; }
+  block.hidden = false;
+  list.innerHTML = recentPapers
+    .map((p, i) => {
+      const label = escapeHtml(String(p.t || 'Untitled'));
+      const src = p.file
+        ? `<i class="ti ti-file-text"></i><span>${escapeHtml(p.file)}</span>`
+        : (p.doi ? `<i class="ti ti-link"></i><span>DOI: ${escapeHtml(p.doi)}</span>` : '<i class="ti ti-file-text"></i><span>paper</span>');
+      const when = p.ts ? `<span class="rm-time"><i class="ti ti-clock"></i> ${_timeAgo(p.ts)}</span>` : '';
+      return `<button class="recent-card" onclick="openRecent(${i})" title="Open this summary">
+                <span class="rt">${label}</span>
+                <span class="rm">${src}${when}</span>
+              </button>`;
+    })
+    .join('');
+}
+
+function openRecent(i) {
+  const p = recentPapers[i];
+  if (!p) return;
+  if (p.data) {
+    // instantly reopen the stored summary
+    recentPapers.splice(i, 1);
+    recentPapers.unshift(p);
+    persistRecent();
+    renderRecent();
+    const crumb = document.getElementById('focus-crumb-title');
+    if (crumb) crumb.textContent = p.t;
+    renderResults(p.data);
+    enterFocus();
+  } else if (p.doi) {
+    // payload evicted — re-summarize the DOI
+    switchTab('doi');
+    document.getElementById('doi-input').value = p.doi;
+    summarizeDoi();
+  }
 }
 
 function rerunDoi(el) {
@@ -1027,48 +1282,112 @@ function rerunDoi(el) {
 function renderResults(data) {
   clearLoading();
   stageDone();
-  currentPaperText = data.full_text || data.summary;
+  currentPaperText = data.full_text || data.overview || '';
   chatHistory = [];
 
-  const fieldText = k => String(data[k] == null ? "" : data[k]);
-  const originalWords = (data.full_text || "").split(/\s+/).filter(Boolean).length;
-  const summaryWords = SECTION_DISPLAY_ORDER
-    .reduce((sum, k) => sum + fieldText(k).split(/\s+/).filter(Boolean).length, 0);
+  const str = v => String(v == null ? '' : v).trim();
+  const originalWords = (data.full_text || '').split(/\s+/).filter(Boolean).length;
+  const summaryWords = [str(data.overview), str(data.problem_statement), str(data.approach), str(data.significance)]
+    .concat((data.key_findings || []).map(f => `${(f && f.finding) || ''} ${(f && f.detail) || ''}`))
+    .join(' ').split(/\s+/).filter(Boolean).length;
   const reduction = originalWords ? Math.round((1 - summaryWords / originalWords) * 100) : 0;
   const readMin = Math.max(1, Math.round(summaryWords / 200));
 
+  const findings = (data.key_findings || []).filter(f => f && f.finding);
+  const rows = (data.results_table || []).filter(r => r && r.metric && r.value);
+  const limitations = (data.limitations || []).filter(Boolean);
+  const futureWork = (data.future_work || []).filter(Boolean);
+  const terms = (data.key_terms || []).filter(t => t && t.term);
+  const insts = (data.institutions || []).filter(Boolean);
+
+  const fullText = data.full_text || '';
+  const spans = (data.page_spans && data.page_spans.length) ? data.page_spans : [[0, fullText.length]];
+  window.pageTexts = spans.map((s, i) => ({ n: i + 1, text: fullText.slice(s[0], s[1]) }));
+  // verified finding quotes -> highlighted passages in the source-paper pane
+  window.citeQuotes = findings
+    .filter(f => f.citation && f.citation.verified && (f.quote || '').trim().length > 12)
+    .map(f => ({ page: f.citation.page, quote: f.quote.trim() }));
+
+  const cardBox = (title, body, cls = '') => `
+    <div class="result-card ${cls}">
+      <div class="result-card-header">${escapeHtml(title)}</div>
+      <div class="result-card-body">${body}</div>
+    </div>`;
+
+  const usePdf = !!(window.selectedPdfFile && window.pdfjsLib);
+  const crumb = document.getElementById('focus-crumb-title');
+  if (crumb) crumb.textContent = data.title || 'Untitled paper';
+  const leftPane = usePdf
+    ? `
+      <aside class="pdf-pane" id="pdf-pane" aria-label="Source PDF">
+        <div class="pdf-sources-row">
+          <span class="pdf-sources-label"><i class="ti ti-folder"></i>Sources (1 file<span class="count" id="pdf-page-count"></span>)</span>
+        </div>
+        <div class="pdf-file-chip"><i class="ti ti-file-type-pdf"></i><span id="pdf-file-name">${escapeHtml(window.selectedPdfFile.name)}</span></div>
+        <div id="pdf-pages"></div>
+      </aside>`
+    : `
+      <aside class="page-rail" id="page-rail" aria-label="Source pages">
+        <div class="rail-head"><i class="ti ti-columns"></i>Source pages<span class="rail-count">${window.pageTexts.length}</span></div>
+        ${window.pageTexts.map(p => `
+          <div class="rail-page" id="page-${p.n}">
+            <span class="rail-page-label">p. ${p.n}</span>
+            <div class="page-text" id="page-text-${p.n}">${renderPageHtml(p)}</div>
+          </div>`).join('')}
+      </aside>`;
+
   document.getElementById('results-area').innerHTML = `
-    <div class="paper-title">${escapeHtml(data.title || "Untitled paper")}</div>
-    <div class="tag-row">
-      <span class="tag">${escapeHtml(data.source || 'unknown')}</span>
-      ${data.year ? `<span class="tag">${escapeHtml(data.year)}</span>` : ""}
-      ${data.journal ? `<span class="tag">${escapeHtml(String(data.journal).slice(0, 40))}</span>` : ""}
-      ${data.cited_by != null ? `<span class="tag">${data.cited_by} citations</span>` : ""}
-      ${data.cached ? `<span class="tag">cached</span>` : ""}
+    <div class="reading-room${usePdf ? ' has-pdf' : ''}" id="reading-room">${leftPane}
+      <div class="summary-pane">
+    <div class="paper-header">
+      <div class="paper-title">${escapeHtml(data.title || 'Untitled paper')}</div>
+      ${(data.authors && data.authors.length) || insts.length
+        ? `<div class="paper-authors">${(data.authors || []).length ? escapeHtml(data.authors.join(', ')) : ''}${insts.length ? ` <span class="paper-institutions">· ${escapeHtml(insts.join(' · '))}</span>` : ''}</div>`
+        : ''}
+      <div class="tag-row">
+        ${!usePdf ? '<button class="cite-tab rail-toggle" onclick="toggleRail()" title="Show the paper\'s pages alongside the summary"><i class="ti ti-columns"></i>Pages</button>' : ''}
+        ${data.grounded_citations != null ? `<span class="tag">${data.grounded_citations} grounded citation${data.grounded_citations === 1 ? '' : 's'}</span>` : ''}
+        ${str(data.publication_info) ? `<span class="pub-badge">${escapeHtml(str(data.publication_info))}</span>` : ''}
+        ${(data.field_tags || []).filter(Boolean).map(t => `<span class="tag tag-accent">${escapeHtml(t)}</span>`).join('')}
+        ${data.year ? `<span class="tag">${escapeHtml(data.year)}</span>` : ''}
+        ${data.journal ? `<span class="tag">${escapeHtml(String(data.journal).slice(0, 40))}</span>` : ''}
+        ${data.cited_by != null ? `<span class="tag">${data.cited_by} citations</span>` : ''}
+      </div>
     </div>
 
+    ${str(data.one_line_summary) ? `<div class="one-line-summary"><p>${escapeHtml(str(data.one_line_summary))}</p></div>` : ''}
+
     <div class="stats">
-      <p class="stats-label">Reading time saved</p>
-      <div class="stats-big">
-        <span class="num" id="stat-num">0%</span>
-        <span class="pill good"><i class="ti ti-clock"></i>~${readMin} min read</span>
-      </div>
-      <div class="statbar" style="margin-bottom:16px"><div class="fill" id="stat-fill" style="width:0%"></div></div>
       <div class="stat-row"><span>Original paper</span><span class="val">${originalWords.toLocaleString()} words</span></div>
       <div class="stat-row"><span>Summary</span><span class="val">${summaryWords.toLocaleString()} words</span></div>
       <div class="stat-row"><span>Reading time</span><span class="val">~${readMin} min</span></div>
     </div>
 
     <div class="results">
-      ${SECTION_DISPLAY_ORDER.map(k => card(k, fieldText(k))).join('')}
+      ${str(data.overview) ? cardBox('Overview', renderParas(data.overview)) : ''}
+      ${str(data.problem_statement) || str(data.approach) ? `<div class="two-col">
+        ${str(data.problem_statement) ? cardBox('Problem statement', renderParas(data.problem_statement)) : ''}
+        ${str(data.approach) ? cardBox('Approach', renderParas(data.approach)) : ''}
+      </div>` : ''}
+      ${findings.length ? cardBox('Key findings', renderFindingsList(findings)) : ''}
+      ${rows.length ? cardBox('Results', renderResultsTable(rows)) : ''}
+      ${str(data.significance) ? cardBox('Significance', renderParas(data.significance)) : ''}
+      ${limitations.length || futureWork.length ? `<div class="two-col">
+        ${limitations.length ? renderAccordion('acc-limits', `Limitations (${limitations.length})`, renderParas(limitations.join('\n'))) : ''}
+        ${futureWork.length ? renderAccordion('acc-future', `Future work (${futureWork.length})`, renderParas(futureWork.join('\n'))) : ''}
+      </div>` : ''}
+      ${terms.length ? renderAccordion('acc-terms', `Key terms (${terms.length})`,
+        terms.map(t => `<div class="term-row"><span class="term-name">${escapeHtml(t.term)}</span><span class="term-def">${escapeHtml(t.definition)}</span></div>`).join('')) : ''}
     </div>
 
+    ${str(data.confidence_notes) ? `<div class="confidence-note"><span>${escapeHtml(str(data.confidence_notes))}</span></div>` : ''}
+
     <div class="action-row">
-      <button class="secondary" onclick="downloadSummary()"><i class="ti ti-download"></i>Export .txt</button>
-      <button class="secondary" onclick="downloadMarkdown()"><i class="ti ti-markdown"></i>.md</button>
-      <button class="secondary" onclick="exportPdf()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+      <button class="secondary" onclick="downloadSummary()">Export .txt</button>
+      <button class="secondary" onclick="downloadMarkdown()">Export .md</button>
+      <button class="secondary" onclick="exportPdf()">Export PDF</button>
       <span class="spacer"></span>
-      <button onclick="resetForNewPaper()"><i class="ti ti-plus"></i>Summarize another paper</button>
+      <button onclick="resetForNewPaper()">Summarize another paper</button>
     </div>
 
     <div class="chat-section">
@@ -1084,18 +1403,27 @@ function renderResults(data) {
         <i class="ti ti-send" onclick="sendChat()"></i>
       </div>
     </div>
+      </div>
+    </div>
   `;
 
+  // in full-screen focus mode, show the source paper alongside the summary
+  if (document.body.classList.contains('focus')) {
+    const room = document.getElementById('reading-room');
+    if (room && !usePdf) room.classList.add('rail-open');
+  }
+  if (usePdf) renderPdfViewer();
+
   window.currentResult = data;
-  animateCount(document.getElementById('stat-num'), reduction);
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const fill = document.getElementById('stat-fill');
-    if (fill) fill.style.width = Math.max(3, Math.min(100, reduction)) + '%';
-  }));
 }
 
 function resetForNewPaper() {
+  exitFocus();
+  const crumb = document.getElementById('focus-crumb-title');
+  if (crumb) crumb.textContent = '';
   selectedFile = null;
+  window.selectedPdfFile = null;
+  window.pdfDoc = null;
   const wrap = document.getElementById('file-card-wrap');
   if (wrap) wrap.innerHTML = '';
   const btn = document.getElementById('summarize-pdf-btn');
@@ -1104,65 +1432,205 @@ function resetForNewPaper() {
   if (doi) doi.value = '';
   currentPaperText = "";
   chatHistory = [];
-  document.getElementById('results-area').innerHTML = `
-    <div class="empty-state">
-      <i class="ti ti-file-description empty-icon"></i>
-      <span>Upload a PDF or paste a DOI above — your structured summary will appear here, section by section</span>
-    </div>`;
+  document.getElementById('results-area').innerHTML = '';
   setBusy(false);
   document.querySelector('.app-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function animateCount(el, target) {
-  if (!el) return;
-  const t0 = performance.now(), dur = 900;
-  function tick(t) {
-    const p = Math.min(1, (t - t0) / dur);
-    const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = Math.round(target * eased) + '%';
-    if (p < 1) requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
+function renderParas(text) {
+  return String(text || '').split(/\n+/).map(s => s.trim()).filter(Boolean)
+    .map(p => `<p class="sec-paragraph">${escapeHtml(p)}</p>`).join('');
 }
 
-function renderSectionBody(text) {
-  const lines = String(text).split('\n');
-  const out = [];
-  let list = null; // 'ul' | 'ol'
-  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) { closeList(); continue; }
-    let m;
-    if ((m = line.match(/^[-•*]\s+(.*)/))) {
-      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
-      out.push(`<li>${escapeHtml(m[1])}</li>`);
-    } else if ((m = line.match(/^\d+[.)]\s+(.*)/))) {
-      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
-      out.push(`<li>${escapeHtml(m[1])}</li>`);
-    } else {
-      closeList();
-      out.push(`<p class="sec-paragraph">${escapeHtml(line)}</p>`);
-    }
-  }
-  closeList();
-  return out.join('');
-}
-
-function card(sectionKey, body, live = false) {
-  const meta = SECTION_META[sectionKey] || { icon: 'ti-file-text', label: sectionKey };
-  const text = String(body == null ? "" : body).trim();
-  if (!text || text === "Data not provided by the model.") return "";
-  return `
-    <div class="result-card${live ? ' live-in' : ''}">
-      <div class="result-card-header">
-        <span class="rc-icon"><i class="ti ${meta.icon}"></i></span>
-        <span class="rc-title">${escapeHtml(meta.label)}</span>
-        <i class="ti ti-copy copy-btn" onclick="copyText(this)" data-text="${encodeURIComponent(text)}"></i>
+function renderFindingsList(findings) {
+  return findings.map((f, idx) => {
+    const c = f.citation;
+    const tab = (c && c.verified)
+      ? `<button class="cite-tab" onclick="jumpToCitation(${c.page}, this.dataset.q)" data-q="${encodeURIComponent(f.quote || '')}" title="Verified word-for-word on page ${c.page} — click to read it in context">p. ${c.page}</button>`
+      : `<span class="cite-tab unverified" title="This claim could not be matched to the paper text — treat it with care">unverified</span>`;
+    return `
+    <div class="finding-item${c && c.verified ? '' : ' finding-unverified'}">
+      <span class="finding-num">${String(idx + 1).padStart(2, '0')}</span>
+      <div>
+        <p class="finding-text">${escapeHtml(f.finding)}${tab}</p>
+        ${f.detail ? `<p class="finding-detail">${escapeHtml(f.detail)}</p>` : ''}
       </div>
-      <div class="result-card-body">${renderSectionBody(text)}</div>
-    </div>
-  `;
+    </div>`;
+  }).join('');
+}
+
+function renderResultsTable(rows) {
+  return `<table class="results-table">
+    <thead><tr><th>Metric</th><th>Value</th><th>vs. prior</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${escapeHtml(r.metric)}</td><td class="rt-val">${escapeHtml(r.value)}</td><td>${escapeHtml(r.comparison || '—')}</td></tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderAccordion(id, label, inner) {
+  return `<details class="accordion" id="${id}">
+    <summary>${escapeHtml(label)}<i class="ti ti-chevron-down acc-chevron"></i></summary>
+    <div class="acc-body">${inner}</div>
+  </details>`;
+}
+
+function toggleRail() {
+  const room = document.getElementById('reading-room');
+  if (room) room.classList.toggle('rail-open');
+}
+
+function renderPageHtml(p, extraQuote) {
+  // Escape-safe highlighting: wrap matches with sentinel chars first, escape,
+  // then turn sentinels into <mark> tags. \u0000..\u0001 = grounded finding
+  // passages, \u0002..\u0003 = the specific quote the user clicked.
+  const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let marked = p.text;
+  const wrap = (quote, open, close) => {
+    if (!quote) return;
+    const re = new RegExp(quote.trim().split(/\s+/).map(escRe).join('\\s+'), 'i');
+    const m = re.exec(marked);
+    if (m) marked = marked.slice(0, m.index) + open + m[0] + close + marked.slice(m.index + m[0].length);
+  };
+  for (const q of (window.citeQuotes || [])) {
+    if (q.page !== p.n) continue;
+    wrap(q.quote, '\u0000', '\u0001');
+  }
+  if (extraQuote) wrap(extraQuote, '\u0002', '\u0003');
+  return escapeHtml(marked)
+    .replace(/\u0000/g, '<mark class="paper-hl">')
+    .replace(/\u0001/g, '</mark>')
+    .replace(/\u0002/g, '<mark class="cite-mark">')
+    .replace(/\u0003/g, '</mark>');
+}
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function renderPdfViewer() {
+  const wrap = document.getElementById('pdf-pages');
+  const nameEl = document.getElementById('pdf-file-name');
+  if (!wrap || !window.selectedPdfFile || !window.pdfjsLib) return;
+  try {
+    const data = await window.selectedPdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    window.pdfDoc = pdf;
+    const count = document.getElementById('pdf-page-count');
+    if (count) count.textContent = ` \u00b7 ${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'}`;
+    const first = await pdf.getPage(1);
+    const base = first.getViewport({ scale: 1 });
+    // slot per page with the right aspect ratio so the scrollbar is stable;
+    // pages are painted lazily as they approach the viewport
+    wrap.innerHTML = '';
+    window.pdfSlots = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const holder = document.createElement('div');
+      holder.className = 'pdf-page-wrap pdf-page-loading';
+      holder.id = 'pdf-page-' + n;
+      holder.dataset.page = n;
+      holder.style.aspectRatio = base.width + ' / ' + base.height;
+      wrap.appendChild(holder);
+      window.pdfSlots.push(holder);
+    }
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        io.unobserve(en.target);
+        paintPdfPage(parseInt(en.target.dataset.page, 10));
+      });
+    }, { root: null, rootMargin: '700px 0px' });
+    window.pdfSlots.forEach(s => io.observe(s));
+    window.pdfPageIO = io;
+  } catch (e) {
+    if (nameEl) nameEl.textContent = 'PDF preview unavailable';
+  }
+}
+
+async function paintPdfPage(n) {
+  if (!window.pdfDoc) return;
+  const holder = document.getElementById('pdf-page-' + n);
+  if (!holder || holder.dataset.painted) return;
+  holder.dataset.painted = '1';
+  try {
+    const page = await window.pdfDoc.getPage(n);
+    const targetW = Math.max(300, holder.clientWidth || 600);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: targetW / base.width });
+    const dpr = window.devicePixelRatio || 1;
+    holder.classList.remove('pdf-page-loading');
+    holder.style.aspectRatio = '';
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width * dpr);
+    canvas.height = Math.floor(viewport.height * dpr);
+    holder.appendChild(canvas);
+    await page.render({
+      canvasContext: canvas.getContext('2d'),
+      viewport,
+      transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+    }).promise;
+    const tc = await page.getTextContent();
+    holder._tc = tc;
+    holder._vp = viewport;
+    for (const q of (window.citeQuotes || [])) {
+      if (q.page === n) addPdfOverlays(holder, tc, viewport, q.quote, 'pdf-hl');
+    }
+  } catch (e) { /* painting failed: leave the empty slot */ }
+}
+
+function addPdfOverlays(holder, tc, viewport, quote, cls) {
+  if (!quote || !tc || !viewport) return 0;
+  // build a normalized char stream with per-item ranges, then locate the quote
+  let full = '';
+  const ranges = [];
+  for (const it of tc.items) {
+    const start = full.length;
+    full += it.str.replace(/\s+/g, ' ').toLowerCase() + ' ';
+    ranges.push([start, full.length, it]);
+  }
+  const q = quote.replace(/\s+/g, ' ').toLowerCase().trim();
+  const idx = full.indexOf(q);
+  if (idx < 0) return 0;
+  const end = idx + q.length;
+  let count = 0;
+  for (const [s, e, it] of ranges) {
+    if (e <= idx || s >= end || !(it.width > 0)) continue;
+    const tx = pdfjsLib.Util.transform(viewport.transform, it.transform);
+    const h = Math.hypot(tx[2], tx[3]) * 1.18;
+    const w = it.width * viewport.scale;
+    const div = document.createElement('div');
+    div.className = cls;
+    div.style.left = tx[4] + 'px';
+    div.style.top = (tx[5] - h * 0.82) + 'px';
+    div.style.width = Math.max(w, 3) + 'px';
+    div.style.height = h + 'px';
+    holder.appendChild(div);
+    count++;
+  }
+  return count;
+}
+
+function jumpToCitation(page, encQuote) {
+  const quote = decodeURIComponent(encQuote || '');
+  const pdfHolder = document.getElementById('pdf-page-' + page);
+  if (pdfHolder && document.getElementById('pdf-pane')) {
+    pdfHolder.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    (async () => {
+      if (!pdfHolder.dataset.painted) await paintPdfPage(page);
+      if (pdfHolder._tc && pdfHolder._vp) {
+        addPdfOverlays(pdfHolder, pdfHolder._tc, pdfHolder._vp, quote, 'pdf-flash');
+        const last = pdfHolder.querySelector('.pdf-flash:last-of-type');
+        if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    })();
+    return;
+  }
+  const room = document.getElementById('reading-room');
+  if (room) room.classList.add('rail-open');
+  const pt = (window.pageTexts || [])[page - 1];
+  const host = document.getElementById('page-text-' + page);
+  if (!pt || !host) return;
+  host.innerHTML = renderPageHtml(pt, quote);
+  const pageEl = document.getElementById('page-' + page);
+  if (pageEl) pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const mark = host.querySelector('mark.cite-mark');
+  if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function copyText(el) {
@@ -1172,12 +1640,32 @@ function copyText(el) {
   setTimeout(() => { el.className = 'ti ti-copy copy-btn'; }, 1500);
 }
 
-  const sectionReport = d => `## Summary\n${d.summary}\n\n## Methodology\n${d.methodology}\n\n## Research Gaps\n${d.research_gaps}\n\n## Findings\n${d.findings}\n\n## Key Statistics\n${d.key_stats || ''}\n\n## Future Work\n${d.future_work}`;
+function exportReport(d) {
+  const L = [];
+  L.push(`# ${d.title || 'Untitled paper'}`);
+  if (d.authors && d.authors.length) L.push(`\n**Authors:** ${d.authors.join(', ')}`);
+  if (d.institutions && d.institutions.length) L.push(`**Institutions:** ${d.institutions.join(', ')}`);
+  if (d.publication_info) L.push(`**Publication:** ${d.publication_info}`);
+  if (d.one_line_summary) L.push(`\n> ${d.one_line_summary}`);
+  if (d.overview) L.push(`\n## Overview\n${d.overview}`);
+  if (d.problem_statement) L.push(`\n## Problem statement\n${d.problem_statement}`);
+  if (d.approach) L.push(`\n## Approach\n${d.approach}`);
+  if (d.key_findings && d.key_findings.length)
+    L.push(`\n## Key findings\n` + d.key_findings.map(f => `- ${f.finding}${f.detail ? ` — ${f.detail}` : ''}`).join('\n'));
+  if (d.results_table && d.results_table.length)
+    L.push(`\n## Results\n| Metric | Value | vs. prior |\n|---|---|---|\n` + d.results_table.map(r => `| ${r.metric} | ${r.value} | ${r.comparison || ''} |`).join('\n'));
+  if (d.significance) L.push(`\n## Why it matters\n${d.significance}`);
+  if (d.limitations && d.limitations.length) L.push(`\n## Limitations\n` + d.limitations.map(x => `- ${x}`).join('\n'));
+  if (d.future_work && d.future_work.length) L.push(`\n## Future work\n` + d.future_work.map(x => `- ${x}`).join('\n'));
+  if (d.key_terms && d.key_terms.length) L.push(`\n## Key terms\n` + d.key_terms.map(t => `- **${t.term}** — ${t.definition}`).join('\n'));
+  if (d.confidence_notes) L.push(`\n> Note: ${d.confidence_notes}`);
+  return L.join('\n');
+}
 
 function downloadSummary() {
   const d = window.currentResult;
-  const report = `# ${d.title}\n\n${sectionReport(d)}`;
-  const blob = new Blob([report], { type: 'text/plain' });
+  if (!d) return;
+  const blob = new Blob([exportReport(d)], { type: 'text/plain' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'paper_summary.txt';
@@ -1188,26 +1676,37 @@ function exportPdf() {
   const d = window.currentResult;
   if (!d) return;
   const esc = escapeHtml;
-  const sec = (t, b) => (b && b.trim() ? `<h2>${t}</h2><div class="sec">${esc(b)}</div>` : "");
+  const paras = t => String(t || '').split(/\n+/).filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('');
+  const list = items => (items && items.length)
+    ? `<ul>${items.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html><html><head><title>${esc(d.title || 'Paper summary')}</title>
     <style>
       body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; line-height: 1.7; padding: 0 20px; }
       h1 { font-size: 1.5rem; letter-spacing: -.01em; border-bottom: 2px solid #1a1a1a; padding-bottom: 12px; }
       h2 { font-size: 1rem; margin: 26px 0 8px; text-transform: uppercase; letter-spacing: .06em; }
-      .sec { font-size: .92rem; color: #333; white-space: pre-wrap; }
       .meta { color: #777; font-size: .85rem; margin: 10px 0 0; }
+      blockquote { border-left: 4px solid #3b6ea5; margin: 18px 0; padding: 8px 16px; background: #f4f8fd; font-weight: 600; }
+      table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+      th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #ddd; }
+      .note { color: #8a6d1a; background: #fdf6e3; border-radius: 8px; padding: 10px 14px; font-size: .85rem; }
       @media print { .noprint { display: none; } }
     </style></head><body>
     <h1>${esc(d.title || 'Untitled paper')}</h1>
-    ${d.authors && d.authors.length ? `<p class="meta">${esc(d.authors.join(', '))}</p>` : ""}
-    ${d.journal ? `<p class="meta">${esc(d.journal)}${d.year ? ' · ' + esc(d.year) : ''}</p>` : ""}
-    ${sec('Summary', d.summary)}
-    ${sec('Methodology', d.methodology)}
-    ${sec('Research Gaps', d.research_gaps)}
-    ${sec('Findings', d.findings)}
-    ${sec('Key Statistics', d.key_stats)}
-    ${sec('Future Work', d.future_work)}
+    ${d.authors && d.authors.length ? `<p class="meta">${esc(d.authors.join(', '))}</p>` : ''}
+    ${d.institutions && d.institutions.length ? `<p class="meta">${esc(d.institutions.join(' · '))}</p>` : ''}
+    ${d.publication_info ? `<p class="meta">${esc(d.publication_info)}</p>` : ''}
+    ${d.one_line_summary ? `<blockquote>${esc(d.one_line_summary)}</blockquote>` : ''}
+    ${d.overview ? `<h2>Overview</h2>${paras(d.overview)}` : ''}
+    ${d.problem_statement ? `<h2>Problem statement</h2>${paras(d.problem_statement)}` : ''}
+    ${d.approach ? `<h2>Approach</h2>${paras(d.approach)}` : ''}
+    ${d.key_findings && d.key_findings.length ? `<h2>Key findings</h2><ul>${d.key_findings.map(f => `<li>${esc(f.finding)}${f.detail ? ` — ${esc(f.detail)}` : ''}</li>`).join('')}</ul>` : ''}
+    ${d.results_table && d.results_table.length ? `<h2>Results</h2><table><tr><th>Metric</th><th>Value</th><th>vs. prior</th></tr>${d.results_table.map(r => `<tr><td>${esc(r.metric)}</td><td>${esc(r.value)}</td><td>${esc(r.comparison || '')}</td></tr>`).join('')}</table>` : ''}
+    ${d.significance ? `<h2>Why it matters</h2>${paras(d.significance)}` : ''}
+    ${d.limitations && d.limitations.length ? `<h2>Limitations</h2>${list(d.limitations)}` : ''}
+    ${d.future_work && d.future_work.length ? `<h2>Future work</h2>${list(d.future_work)}` : ''}
+    ${d.key_terms && d.key_terms.length ? `<h2>Key terms</h2><ul>${d.key_terms.map(t => `<li><strong>${esc(t.term)}</strong> — ${esc(t.definition)}</li>`).join('')}</ul>` : ''}
+    ${d.confidence_notes ? `<p class="note">${esc(d.confidence_notes)}</p>` : ''}
     <p class="noprint" style="margin-top:30px;"><button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">Save as PDF</button></p>
     </body></html>`);
   w.document.close();
@@ -1216,8 +1715,7 @@ function exportPdf() {
 function downloadMarkdown() {
   const d = window.currentResult;
   if (!d) return;
-  const report = `# ${d.title}\n\n${sectionReport(d)}`;
-  const blob = new Blob([report], { type: 'text/markdown' });
+  const blob = new Blob([exportReport(d)], { type: 'text/markdown' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'paper_summary.md';

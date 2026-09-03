@@ -1,7 +1,7 @@
-"""Tests for summarize section strategies, prompt context, and the
-findings digit-check retry. Run from the project root:
-./venv/bin/python -m pytest tests/ -v
+"""Tests for the structured PaperSummary generation engine.
+Run from the project root:  ./venv/bin/python -m pytest tests/ -v
 """
+import json
 import os
 import sys
 
@@ -11,83 +11,87 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import summarize  # noqa: E402
 
-
-def test_key_stats_section_registered():
-    assert "key_stats" in summarize.SECTION_STRATEGIES
-    assert "key_stats" in summarize._SECTION_ORDER
-    # every ordered section has a strategy, and vice versa
-    assert set(summarize._SECTION_ORDER) == set(summarize.SECTION_STRATEGIES.keys())
-
-
-def test_paper_context_block():
-    block = summarize._paper_context_block("My Title", "My abstract.")
-    assert "Paper title: My Title" in block
-    assert "Paper abstract: My abstract." in block
-    assert summarize._paper_context_block("", "") == ""
-    assert summarize._paper_context_block("T only") .startswith("Paper title: T only")
-
-
-def test_paper_context_block_truncates_abstract():
-    long_abstract = "x" * 5000
-    block = summarize._paper_context_block("", long_abstract)
-    assert "x" * 1500 in block
-    assert "x" * 1501 not in block
+VALID_SUMMARY = {
+    "title": "Test Paper",
+    "authors": ["Jane Doe"],
+    "institutions": ["Test University"],
+    "publication_info": "arXiv:2401.00001",
+    "one_line_summary": "A one line summary of the paper.",
+    "field_tags": ["Machine Learning"],
+    "overview": "The paper studies things.",
+    "problem_statement": "A gap exists.",
+    "approach": "They use a novel method.",
+    "key_findings": [{"finding": "It works", "detail": "94.2% accuracy"}],
+    "results_table": [{"metric": "Accuracy", "value": "94.2%", "comparison": "+3.1"}],
+    "significance": "Important for the field.",
+    "limitations": ["Small dataset"],
+    "future_work": ["Scale it up"],
+    "key_terms": [{"term": "Transformer", "definition": "A neural architecture."}],
+    "confidence_notes": "",
+}
 
 
-def test_findings_retry_when_no_numbers(monkeypatch):
+def test_schema_rejects_missing_required_fields():
+    with pytest.raises(summarize.ValidationError):
+        summarize.PaperSummary(title="t")
+
+
+def test_generate_paper_summary_valid_json(monkeypatch):
+    monkeypatch.setattr(summarize, "_ask_groq", lambda messages: json.dumps(VALID_SUMMARY))
+    result = summarize._generate_paper_summary("paper text")
+    assert result["title"] == "Test Paper"
+    assert result["key_findings"][0]["detail"] == "94.2% accuracy"
+
+
+def test_generate_paper_summary_tolerates_code_fences(monkeypatch):
+    monkeypatch.setattr(summarize, "_ask_groq",
+                        lambda messages: "```json\n" + json.dumps(VALID_SUMMARY) + "\n```")
+    result = summarize._generate_paper_summary("paper text")
+    assert result["overview"] == "The paper studies things."
+
+
+def test_generate_paper_summary_retries_invalid_json(monkeypatch):
     calls = []
 
     def fake_groq(messages):
         calls.append(messages)
         if len(calls) == 1:
-            return "The method works well in practice."  # no digits
-        return "Accuracy: 94.2% (+3.1 over the baseline)."  # has digits
+            return "I cannot do that."  # unparseable → not valid JSON
+        return json.dumps(VALID_SUMMARY)
 
     monkeypatch.setattr(summarize, "_ask_groq", fake_groq)
-    result = summarize._ask_section("findings", "paper text")
-    assert "94.2%" in result
-    assert len(calls) == 2  # retried once for missing numbers
+    result = summarize._generate_paper_summary("paper text")
+    assert result["significance"] == "Important for the field."
+    assert len(calls) == 2  # one corrective retry
+    assert "Return ONLY the JSON object" in calls[1][-1]["content"]
 
 
-def test_findings_kept_when_numbers_present(monkeypatch):
-    calls = []
+def test_generate_paper_summary_ollama_fallback(monkeypatch):
+    def failing_groq(messages):
+        raise Exception("Groq error: quota exhausted")
 
-    def fake_groq(messages):
-        calls.append(messages)
-        return "Accuracy improved by 12% across 3 datasets."
-
-    monkeypatch.setattr(summarize, "_ask_groq", fake_groq)
-    result = summarize._ask_section("findings", "paper text")
-    assert "12%" in result
-    assert len(calls) == 1  # no retry needed
+    monkeypatch.setattr(summarize, "_ask_groq", failing_groq)
+    monkeypatch.setattr(summarize, "_ask_ollama",
+                        lambda prompt, json_mode=False: json.dumps(VALID_SUMMARY))
+    result = summarize._generate_paper_summary("paper text")
+    assert result["problem_statement"] == "A gap exists."
 
 
-def test_non_findings_section_not_digit_checked(monkeypatch):
-    calls = []
+def test_generate_paper_summary_raises_when_all_providers_fail(monkeypatch):
+    def down(*a, **k):
+        raise Exception("provider down")
 
-    def fake_groq(messages):
-        calls.append(messages)
-        return "A qualitative methodology description without numbers."
-
-    monkeypatch.setattr(summarize, "_ask_groq", fake_groq)
-    result = summarize._ask_section("methodology", "paper text")
-    assert "qualitative" in result
-    assert len(calls) == 1  # digit check only applies to findings
+    monkeypatch.setattr(summarize, "_ask_groq", down)
+    monkeypatch.setattr(summarize, "_ask_ollama", down)
+    with pytest.raises(Exception, match="Summary generation failed"):
+        summarize._generate_paper_summary("paper text")
 
 
-def test_section_prompt_includes_paper_context(monkeypatch):
-    captured = {}
-
-    def fake_groq(messages):
-        captured["messages"] = messages
-        return "Accuracy: 99.9%."
-
-    monkeypatch.setattr(summarize, "_ask_groq", fake_groq)
-    summarize._ask_section("key_stats", "paper text", title="My Paper", abstract="An abstract.")
-    user_content = captured["messages"][1]["content"]
-    assert "Paper title: My Paper" in user_content
-    assert "Paper abstract: An abstract." in user_content
-    assert "key quantitative results" in user_content  # key_stats instruction
+def test_parse_json_object_extracts_embedded_json():
+    raw = ('Here you go:\n{"title": "T", "one_line_summary": "x", "overview": "o", '
+           '"problem_statement": "p", "approach": "a", "significance": "s"}\nHope that helps!')
+    data = summarize._parse_json_object(raw)
+    assert data["title"] == "T"
 
 
 def test_cache_roundtrip_and_versioning(tmp_path, monkeypatch):

@@ -53,13 +53,15 @@ def test_stream_pipeline_error(client, monkeypatch):
 def test_stream_success(client, monkeypatch):
     monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
 
-    def fake_stream(text, title="", abstract=""):
-        yield {"type": "section_done", "section": "summary", "content": "A summary."}
-        yield {"type": "section_done", "section": "findings", "content": "Some findings."}
+    def fake_stream(text, title="", abstract="", source=""):
         yield {"type": "done", "result": {
-            "summary": "A summary.", "methodology": "A method.",
-            "research_gaps": "Some gaps.", "findings": "Some findings.",
-            "future_work": "Future work.", "full_text": text,
+            "title": "Model Title", "authors": [],
+            "one_line_summary": "One line.",
+            "overview": "An overview.", "problem_statement": "A problem.",
+            "approach": "An approach.", "significance": "Significant.",
+            "key_findings": [], "results_table": [], "limitations": [],
+            "future_work": [], "key_terms": [], "confidence_notes": "",
+            "full_text": text,
         }}
 
     monkeypatch.setattr(api, "stream_summarize_paper", fake_stream)
@@ -72,16 +74,20 @@ def test_stream_success(client, monkeypatch):
     types = [e["type"] for e in events]
     assert types[0] == "meta"
     assert events[0]["meta"]["title"] == "Test Paper"
-    assert types.count("section_done") == 2
     assert types[-1] == "done"
-    assert events[-1]["result"]["summary"] == "A summary."
+    assert events[-1]["result"]["overview"] == "An overview."
     assert events[-1]["result"]["full_text"] == FAKE_PAPER["full_text"]
+    # the done payload must carry the paper metadata for the UI header
+    assert events[-1]["result"]["title"] == "Test Paper"
+    assert events[-1]["result"]["source"] == "pdf"
+    assert events[-1]["result"]["authors"] == ["Jane Doe"]
+    assert events[-1]["result"]["year"] == "2025"
 
 
 def test_stream_section_failure_surfaces_error(client, monkeypatch):
     monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
 
-    def failing_stream(text, title="", abstract=""):
+    def failing_stream(text, title="", abstract="", source=""):
         yield {"type": "error", "detail": "Groq error: rate limit exceeded"}
 
     monkeypatch.setattr(api, "stream_summarize_paper", failing_stream)

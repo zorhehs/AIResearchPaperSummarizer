@@ -1,10 +1,12 @@
 import os
+import re
 import requests
+from difflib import SequenceMatcher
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from extract import extract_text, PDFExtractionError
+from extract import extract_text, extract_page_texts, PDFExtractionError, extract_pdf_metadata
 from clean import clean_text
 from metadata import extract_metadata
 from fetch_doi import get_pdf_url_from_doi
@@ -12,14 +14,7 @@ from fetch_doi import get_pdf_url_from_doi
 UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "zorhehs@gmail.com")
 
 
-def get_metadata_from_doi_crossref(doi):
-    encoded_doi = requests.utils.quote(doi, safe="")
-    url = "https://api.crossref.org/works/" + encoded_doi
-    response = requests.get(url, timeout=20, headers={"User-Agent": "AI-Research-Summarizer/1.0"})
-    if response.status_code != 200:
-        return {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
-
-    data = response.json().get("message", {})
+def _parse_crossref_item(data: dict) -> dict:
     title = data.get("title", [""])
     title = title[0] if title else ""
     abstract = data.get("abstract", "") or ""
@@ -28,7 +23,7 @@ def get_metadata_from_doi_crossref(doi):
         for a in data.get("author", [])[:12]
     ]
     year = ""
-    for field in ("published-print", "published-online", "created"):
+    for field in ("published-print", "published-online", "issued", "created"):
         parts = data.get(field, {}).get("date-parts", [[None]])
         if parts and parts[0] and parts[0][0]:
             year = str(parts[0][0])
@@ -39,6 +34,106 @@ def get_metadata_from_doi_crossref(doi):
     return {"title": title, "abstract": abstract, "authors": authors, "year": year, "journal": journal, "cited_by": cited_by}
 
 
+def get_metadata_from_doi_crossref(doi):
+    encoded_doi = requests.utils.quote(doi, safe="")
+    url = "https://api.crossref.org/works/" + encoded_doi
+    response = requests.get(url, timeout=20, headers={"User-Agent": "AI-Research-Summarizer/1.0"})
+    if response.status_code != 200:
+        return {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
+
+    data = response.json().get("message", {})
+    return _parse_crossref_item(data)
+
+
+def _title_similarity(a: str, b: str) -> float:
+    def norm(s):
+        return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+    a, b = norm(a), norm(b)
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def get_metadata_from_crossref_search(title: str, rows: int = 3):
+    """Look a paper up on Crossref by its title.
+
+    Returns the best match's metadata only when the matched title closely
+    resembles the given title (similarity >= 0.6), so we never attach the
+    wrong paper's authors/journal. Returns None on any failure.
+    """
+    if not title:
+        return None
+    try:
+        response = requests.get(
+            "https://api.crossref.org/works",
+            params={
+                "query.bibliographic": title,
+                "rows": rows,
+                "select": "title,author,issued,container-title,is-referenced-by-count",
+            },
+            timeout=15,
+            headers={"User-Agent": "AI-Research-Summarizer/1.0"},
+        )
+        if response.status_code != 200:
+            return None
+        items = response.json().get("message", {}).get("items", [])
+    except Exception:
+        return None
+
+    best, best_score = None, 0.0
+    for item in items:
+        candidate_title = (item.get("title") or [""])[0]
+        score = _title_similarity(title, candidate_title)
+        if score > best_score:
+            best, best_score = item, score
+    if best is None or best_score < 0.6:
+        return None
+
+    meta = _parse_crossref_item(best)
+    meta.pop("abstract", None)  # the PDF has the real abstract
+    return meta
+
+
+def _enrich_from_crossref(meta: dict) -> dict:
+    """Fill missing authors/year/journal/citations via a Crossref title search."""
+    try:
+        found = get_metadata_from_crossref_search(meta.get("title", ""))
+    except Exception:
+        found = None
+    if not found:
+        return meta
+    for key in ("authors", "year", "journal", "cited_by"):
+        if not meta.get(key) and found.get(key):
+            meta[key] = found[key]
+    return meta
+
+
+def _finalize_pdf_meta(meta: dict, pdf_path: str) -> dict:
+    """Complete PDF-derived metadata with embedded info and Crossref lookup."""
+    embedded = extract_pdf_metadata(pdf_path)
+
+    # Prefer the PDF's embedded title when the text heuristics found nothing
+    if not meta.get("title") and embedded["title"]:
+        meta["title"] = embedded["title"]
+
+    authors = meta.get("authors") or []
+    if not authors and embedded["author"]:
+        authors = [
+            a.strip(" .-*")
+            for a in re.split(r"[,;]|\band\b|&", embedded["author"])
+            if a.strip(" .-*")
+        ]
+    meta["authors"] = authors
+    meta["year"] = meta.get("year") or ""
+    meta["journal"] = meta.get("journal") or ""
+    meta["cited_by"] = meta.get("cited_by")
+
+    if meta.get("title"):
+        meta = _enrich_from_crossref(meta)
+    return meta
+
+
 def download_pdf(pdf_url, save_path="temp_downloaded.pdf"):
     response = requests.get(pdf_url, timeout=15)
     with open(save_path, "wb") as f:
@@ -46,10 +141,26 @@ def download_pdf(pdf_url, save_path="temp_downloaded.pdf"):
     return save_path
 
 
+def _build_page_text(page_texts: list) -> tuple:
+    """Clean each PDF page separately and join them, keeping a span index so
+    any offset in the combined text can be mapped back to a page number.
+
+    Returns (cleaned_full_text, page_spans) where page_spans[i] = [start, end)
+    gives the character range of physical page i+1 inside cleaned_full_text.
+    """
+    cleaned_pages = [clean_text(p) for p in page_texts]
+    cleaned = "\n\n".join(cleaned_pages)
+    spans, offset = [], 0
+    for cp in cleaned_pages:
+        spans.append([offset, offset + len(cp)])
+        offset += len(cp) + 2  # account for the "\n\n" join
+    return cleaned, spans
+
+
 def process_input(pdf_path=None, doi=None, email=None):
     if pdf_path:
         try:
-            raw = extract_text(pdf_path)
+            page_texts = extract_page_texts(pdf_path)
         except PDFExtractionError as e:
             return {
                 "source": "error",
@@ -59,9 +170,21 @@ def process_input(pdf_path=None, doi=None, email=None):
                 "error": str(e),
             }
 
-        cleaned = clean_text(raw)
-        meta = extract_metadata(cleaned)
-        meta.update({"source": "pdf", "full_text": cleaned, "authors": [], "year": "", "journal": "", "cited_by": None})
+        cleaned, page_spans = _build_page_text(page_texts)
+        if len(cleaned.strip()) < 50:
+            return {
+                "source": "error",
+                "title": "",
+                "abstract": "",
+                "full_text": "",
+                "error": (
+                    f"'{pdf_path}' appears to have no extractable text. "
+                    f"This may be a scanned PDF that needs OCR, which isn't supported yet."
+                ),
+            }
+
+        meta = _finalize_pdf_meta(extract_metadata(cleaned), pdf_path)
+        meta.update({"source": "pdf", "full_text": cleaned, "page_spans": page_spans})
         return meta
 
     elif doi:
@@ -70,11 +193,11 @@ def process_input(pdf_path=None, doi=None, email=None):
         if pdf_url:
             try:
                 local_path = download_pdf(pdf_url)
-                raw = extract_text(local_path)
-                cleaned = clean_text(raw)
-                meta = extract_metadata(cleaned)
+                page_texts = extract_page_texts(local_path)
+                cleaned, page_spans = _build_page_text(page_texts)
+                meta = _finalize_pdf_meta(extract_metadata(cleaned), local_path)
                 os.remove(local_path)
-                meta.update({"source": "doi_pdf", "full_text": cleaned, "authors": [], "year": "", "journal": "", "cited_by": None})
+                meta.update({"source": "doi_pdf", "full_text": cleaned, "page_spans": page_spans})
                 return meta
             except Exception as e:
                 print("PDF download/parsing failed:", e)
@@ -82,7 +205,11 @@ def process_input(pdf_path=None, doi=None, email=None):
         meta = get_metadata_from_doi_crossref(doi)
         abstract = (meta.get("abstract") or "").strip()
         if abstract:
-            meta.update({"source": "doi_metadata_only", "full_text": abstract})
+            meta.update({
+                "source": "doi_metadata_only",
+                "full_text": abstract,
+                "page_spans": [[0, len(abstract)]],
+            })
             return meta
 
         return {

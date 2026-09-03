@@ -6,7 +6,10 @@ import sqlite3
 import threading
 import time
 import requests
+from typing import List, Optional
+
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
@@ -28,8 +31,9 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "users.
 
 
 # Bump when summary shape/prompting changes so stale cached entries
-# (e.g. pre-key_stats 5-section summaries) are not served forever.
-CACHE_VERSION = "v3"
+# are not served forever.
+# v6: key findings carry verbatim quotes for citation grounding.
+CACHE_VERSION = "v6"
 
 # ---------------------------------------------------------------------------
 # Groq free-tier token budget
@@ -234,116 +238,134 @@ SYSTEM_PROMPT = """You are an expert AI research assistant. You analyze research
 Follow the user's format instructions exactly. Never copy the instructions or example placeholders into your answer.
 Always write real content grounded in the paper text provided. If the paper does not cover something, say so briefly rather than inventing it."""
 
-PAPER_TEXT_RULE = "Base your answer ONLY on the paper text below."
+# ---------------------------------------------------------------------------
+# Structured paper summary — schema-validated JSON output
+# ---------------------------------------------------------------------------
 
-# Each of the 5 sections uses its own dedicated prompting + formatting strategy.
-SECTION_STRATEGIES = {
-    "summary": {
-        "instruction": """Write the summary as a single cohesive academic paragraph of about 150 words, in the style of a journal abstract.
-Cover, in this order: the problem the paper addresses, the approach it takes, and the significance of its results.
-Plain prose only — no bullet points, no headings.""",
-        "format": "paragraph",
-    },
-    "methodology": {
-        "instruction": """Describe the methodology as a numbered list of 3-6 steps (1., 2., 3., ...), one step per line.
-Each step is one sentence describing a distinct methodological component: data, model/architecture, experimental design, or evaluation metrics.
-Begin with one short introductory sentence before the list.""",
-        "format": "numbered_steps",
-    },
-    "research_gaps": {
-        "instruction": """Identify limitations and open questions as a bulleted list of 3-5 items (one per line, each starting with "- ").
-Each bullet states one specific gap and, in a few words, why it matters.
-Keep each bullet under 30 words.""",
-        "format": "bullet_list",
-    },
-    "findings": {
-        "instruction": """Report the key findings as a bulleted list of 3-5 items (one per line, each starting with "- ").
-Each bullet is a single concrete, specific finding stated as a complete sentence with the quantitative result where available (e.g. "achieved 34.2 BLEU, +4.1 over the baseline").
-Avoid vague statements like "the method works well".""",
-        "format": "bullet_list",
-    },
-    "future_work": {
-        "instruction": """Write the future-work outlook as one short paragraph of 2-3 sentences, followed by 2-4 concrete suggested directions as a bulleted list (one per line, each starting with "- ").
-Each suggested direction should be actionable, not generic.""",
-        "format": "paragraph_plus_list",
-    },
-    "key_stats": {
-        "instruction": """Extract the key quantitative results as a bulleted list of 3-6 items (one per line, each starting with "- ").
-Each bullet follows the pattern "metric: value (context/comparison)" — e.g. "Accuracy: 94.2% (+3.1 over the BERT baseline on GLUE)".
-Include dataset sizes, sample counts, or runtime figures where the paper reports them.
-If the paper reports no quantitative results, write exactly: "No quantitative results reported."
-Copy numbers verbatim from the paper — never round, convert, or estimate.""",
-        "format": "bullet_list",
-    },
-}
-
-_SECTION_ORDER = ["summary", "methodology", "research_gaps", "findings", "future_work", "key_stats"]
+class KeyFinding(BaseModel):
+    finding: str
+    detail: Optional[str] = None
+    quote: Optional[str] = None
 
 
-def _paper_context_block(title: str = "", abstract: str = "") -> str:
-    """Optional identity block prepended to section prompts so the model can
-    anchor its analysis to the paper instead of writing generic prose."""
-    parts = []
+class ResultRow(BaseModel):
+    metric: str
+    value: str
+    comparison: Optional[str] = None
+
+
+class KeyTerm(BaseModel):
+    term: str
+    definition: str
+
+
+class PaperSummary(BaseModel):
+    title: str
+    authors: List[str] = []
+    institutions: List[str] = []
+    publication_info: Optional[str] = None
+    one_line_summary: str
+    field_tags: List[str] = []
+    overview: str
+    problem_statement: str
+    approach: str
+    key_findings: List[KeyFinding] = []
+    results_table: List[ResultRow] = []
+    significance: str
+    limitations: List[str] = []
+    future_work: List[str] = []
+    key_terms: List[KeyTerm] = []
+    confidence_notes: Optional[str] = None
+
+
+PAPER_SUMMARY_SYSTEM_PROMPT = """You are a research paper summarization engine for an academic tool. You will be given the full text of a research paper (possibly including OCR artifacts from PDF extraction). Your job is to produce a structured, accurate summary.
+
+RULES:
+- Base every claim strictly on the provided text. Never invent authors, numbers, or findings.
+- Paraphrase in your own words — do not copy sentences verbatim from the paper.
+- Keep technical terms accurate; do not oversimplify to the point of being wrong.
+- If a field cannot be supported by the text (e.g. limitations, institutions), return an empty value — do not fabricate.
+- Numbers, equations, and results should be reported precisely as given.
+- For every key finding, include "quote": a short verbatim quote (max 25 words) copied EXACTLY, word-for-word, from the paper text that supports the finding. The tool verifies these quotes against the text and flags any that cannot be found, so never paraphrase, trim, or invent a quote — if you cannot locate one, leave it empty.
+- Write for an audience that is technically literate but not necessarily expert in this exact subfield — define jargon briefly in the key_terms field.
+- Output ONLY valid JSON matching this schema — no markdown, no preamble, no code fences, no trailing commentary:
+{"title": str, "authors": [str], "institutions": [str], "publication_info": str (journal/arXiv id/date if available, else ""), "one_line_summary": str (max 25 words), "field_tags": [str], "overview": str (2-4 sentences, what the paper is about and why it matters), "problem_statement": str (the gap or question motivating the work), "approach": str (2-4 sentences on methodology/technique), "key_findings": [{"finding": str, "detail": str (optional supporting number/context), "quote": str (verbatim, max 25 words, else "")}], "results_table": [{"metric": str, "value": str, "comparison": str (optional)}], "significance": str (why this matters / who should care), "limitations": [str], "future_work": [str], "key_terms": [{"term": str, "definition": str (one sentence)}], "confidence_notes": str (optional — flag ambiguous, truncated, or hard-to-parse parts; empty string if none)}"""
+
+
+def _parse_json_object(raw: str) -> dict:
+    """Extract a JSON object from a model response, tolerating code fences."""
+    s = (raw or "").strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:json)?\s*", "", s).strip()
+        s = re.sub(r"\s*```$", "", s).strip()
+    try:
+        data = json.loads(s)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        m = re.search(r"\{.*\}", s, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+    return {}
+
+
+def _generate_paper_summary(text: str, title: str = "", abstract: str = "", source: str = "") -> dict:
+    """Produce the full structured PaperSummary in ONE consolidated call.
+
+    The model output is validated against the pydantic schema; invalid or
+    unparseable JSON gets one corrective retry, then a local Ollama fallback.
+    """
+    context = _prepare_section_context(text)
+    header = "Summarize the following research paper.\n"
     if title:
-        parts.append(f"Paper title: {title}")
+        header += f"\nTITLE (if known): {title}\n"
+    if source:
+        header += f"SOURCE: {source}\n"
     if abstract:
-        parts.append(f"Paper abstract: {abstract[:1500]}")
-    return ("\n".join(parts) + "\n") if parts else ""
+        header += f"ABSTRACT: {abstract[:800]}\n"
+    user_content = header + "\nFULL TEXT:\n" + context
+    messages = [
+        {"role": "system", "content": PAPER_SUMMARY_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+    if len(text) > SECTION_CONTEXT_CHARS:
+        messages.append({"role": "user", "content":
+            "NOTE: the paper text above was truncated to fit the context window "
+            "(middle portions omitted). Fill whatever fields the available text "
+            "supports and mention the truncation in confidence_notes."})
 
-
-def _ask_section(section: str, condensed_text: str, title: str = "", abstract: str = "") -> str:
-    strategy = SECTION_STRATEGIES[section]
-    prompt = f"""{_paper_context_block(title, abstract)}
-{strategy["instruction"]}
-
-{PAPER_TEXT_RULE}
-
-Paper text:
-{condensed_text}
-"""
-    last_error = None
+    last_err = "no response"
     for attempt in range(2):
         try:
-            messages = [{"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt}]
-            if attempt == 1:
-                messages.append({"role": "user", "content":
-                    "Your previous response copied placeholder text from the instructions instead of analyzing the paper. "
-                    "Do NOT repeat the instructions. Write real analysis of the paper text only."})
-            response_text = _ask_groq(messages).replace("```json", "").replace("```", "").strip()
-            if response_text and not _is_template_echo(response_text):
-                # A findings section without a single number is almost always
-                # vague filler — retry once asking for the quantitative results.
-                if section == "findings" and attempt == 0 and not any(ch.isdigit() for ch in response_text):
-                    messages.append({"role": "user", "content":
-                        "Your response contains no concrete numbers. Re-answer with the paper's actual "
-                        "quantitative results (metrics, percentages, dataset sizes). If the paper truly "
-                        "reports none, say so explicitly."})
-                    retry_text = _ask_groq(messages).replace("```json", "").replace("```", "").strip()
-                    if retry_text and any(ch.isdigit() for ch in retry_text):
-                        response_text = retry_text
-                # Strip a leading meta sentence like "I can provide a step-by-step analysis..."
-                if _is_meta_response(response_text):
-                    lines = response_text.split("\n")
-                    if len(lines) > 1:
-                        response_text = "\n".join(lines[1:]).strip()
-                    else:
-                        last_error = "meta response"
-                        continue
-                return response_text
-            last_error = "template echo or empty response"
+            raw = _ask_groq(messages)
         except Exception as e:
-            last_error = str(e)
+            # provider-level failure (quota, network) → try the local fallback
+            last_err = str(e)
             break
+        data = _parse_json_object(raw)
+        try:
+            return PaperSummary(**data).model_dump()
+        except ValidationError as e:
+            last_err = f"schema validation failed ({e.error_count()} error(s))"
+        except Exception as e:
+            last_err = str(e)
+        if attempt == 0:
+            messages.append({"role": "assistant", "content": (raw or "")[:4000]})
+            messages.append({"role": "user", "content":
+                "Your last output was invalid JSON or did not match the schema. "
+                "Return ONLY the JSON object matching the schema — no markdown, "
+                "no preamble, no code fences."})
 
-    # Fallback to local Ollama for this section
+    # Last resort: local Ollama in JSON mode
     try:
-        fallback = _ask_ollama(prompt, json_mode=False).strip()
-        if fallback:
-            return fallback
-    except Exception as e:
-        last_error = f"{last_error} | Ollama: {str(e)}"
-    raise Exception(f"Section '{section}' failed: {last_error}")
+        fallback = _ask_ollama(PAPER_SUMMARY_SYSTEM_PROMPT + "\n\n" + user_content, json_mode=True)
+        return PaperSummary(**_parse_json_object(fallback)).model_dump()
+    except Exception:
+        pass
+    raise Exception(f"Summary generation failed: {last_err}")
 
 
 def _prepare_section_context(text: str) -> str:
@@ -365,119 +387,7 @@ def _prepare_section_context(text: str) -> str:
     return "\n\n[ ... middle section omitted ... ]\n\n".join((head, mid, tail))[:MAX_INPUT_CHARS]
 
 
-def _generate_all_sections(text: str, title: str = "", abstract: str = "") -> dict:
-    """Ask the model for every section in a SINGLE request.
-
-    The old flow (map-reduce every long paper, then fire 6 parallel section
-    calls, each resending the full paper) burned ~25k+ tokens and 7+ calls per
-    paper, which melted Groq's 8k/min and 200k/day budgets and caused the
-    minutes-long failures. One consolidated JSON call is ~5k tokens and finishes
-    in seconds. `_ask_groq` rotates across models when one is rate-limited.
-    """
-    strategy_lines = "\n".join(
-        f"- {key}: {SECTION_STRATEGIES[key]['instruction'].strip()}"
-        for key in _SECTION_ORDER
-    )
-    context = _paper_context_block(title, abstract)
-    user_content = (
-        "Return ONLY valid JSON — no prose, no markdown fences. "
-        f"The JSON must have exactly these keys: {', '.join(_SECTION_ORDER)}.\n\n"
-        "Content requirements per section:\n" + strategy_lines + "\n\n"
-        + context
-        + "\n\nPaper text:\n" + text
-    )
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT + " Always return valid JSON with the requested keys."},
-        {"role": "user", "content": user_content},
-    ]
-
-    def _parse(raw: str) -> dict:
-        s = (raw or "").strip()
-        if s.startswith("```"):
-            s = re.sub(r"^```(?:json)?\s*", "", s).strip()
-            s = re.sub(r"\s*```$", "", s).strip()
-        try:
-            data = json.loads(s)
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            m = re.search(r"\{.*\}", s, re.DOTALL)
-            if m:
-                try:
-                    data = json.loads(m.group(0))
-                    return data if isinstance(data, dict) else {}
-                except Exception:
-                    return {}
-            return {}
-
-    raw = _ask_groq(messages)
-    data = _parse(raw)
-
-    # One corrective retry when sections are missing/empty
-    missing = [k for k in _SECTION_ORDER if not data.get(k)]
-    if missing:
-        try:
-            retry_content = (
-                "Return ONLY valid JSON with exactly these keys: "
-                f"{', '.join(_SECTION_ORDER)}. You omitted or left empty: {', '.join(missing)}.\n"
-                "Base the content on this paper excerpt:\n" + text[:8000]
-            )
-            retry = _parse(_ask_groq([{"role": "user", "content": retry_content}]))
-            for k in missing:
-                if retry.get(k):
-                    data[k] = retry[k]
-        except Exception:
-            pass
-
-    # Last-resort: generate any still-missing sections individually (rare).
-    for k in [k for k in _SECTION_ORDER if not data.get(k)]:
-        try:
-            data[k] = _ask_section(k, text[:6000], title=title, abstract=abstract)
-        except Exception:
-            data[k] = ""
-    return data
-
-
-def _as_text(v) -> str:
-    """Coerce a model-provided JSON value (string, list, or dict) to text."""
-    if isinstance(v, list):
-        parts = []
-        for x in v:
-            if isinstance(x, dict):
-                parts.append(x.get("content") or x.get("text") or x.get("value") or "")
-            else:
-                parts.append(str(x))
-        return "\n".join(p for p in parts if p)
-    if isinstance(v, dict):
-        return v.get("content") or v.get("text") or v.get("value") or ""
-    return "" if v is None else str(v)
-
-
-def _polish_sections(data: dict, text: str, title: str = "", abstract: str = "") -> dict:
-    """Apply the quality guards per section (echo/meta/findings-digit) to a
-    consolidated JSON result."""
-    sections = {}
-    for k in _SECTION_ORDER:
-        v = _as_text(data.get(k)).strip()
-        if not v or _is_template_echo(v):
-            v = ""
-        elif _is_meta_response(v):
-            lines = v.split("\n")
-            v = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
-        sections[k] = v
-
-    # A findings section without a single number is almost always vague filler —
-    # retarget once asking for the quantitative results.
-    if sections.get("findings") and not any(ch.isdigit() for ch in sections["findings"]):
-        try:
-            retry = _ask_section("findings", text[:6000], title=title, abstract=abstract)
-            if retry and any(ch.isdigit() for ch in retry):
-                sections["findings"] = retry
-        except Exception:
-            pass
-    return sections
-
-
-def summarize_paper(text: str, session_id: str = None, title: str = "", abstract: str = "") -> dict:
+def summarize_paper(text: str, session_id: str = None, title: str = "", abstract: str = "", source: str = "") -> dict:
     if session_id:
         from user_session import check_and_increment_usage
         check_and_increment_usage(session_id)
@@ -490,11 +400,7 @@ def summarize_paper(text: str, session_id: str = None, title: str = "", abstract
         result["cached"] = True
         return result
 
-    condensed_text = _prepare_section_context(text)
-    data = _generate_all_sections(condensed_text, title=title, abstract=abstract)
-    sections = _polish_sections(data, condensed_text, title=title, abstract=abstract)
-
-    result = {k: (v if v else "Data not provided by the model.") for k, v in sections.items()}
+    result = _generate_paper_summary(text, title=title, abstract=abstract, source=source)
     result["full_text"] = text
     _cache_put(text, result)
     return result
@@ -534,14 +440,15 @@ Answer:"""
         raise Exception(f"Local LLM Error - {str(e)}")
 
 
-def stream_summarize_paper(text: str, title: str = "", abstract: str = ""):
+def stream_summarize_paper(text: str, title: str = "", abstract: str = "", source: str = ""):
     """Streaming variant of summarize_paper.
 
-    Now backed by a single consolidated model call that returns every section
-    at once (see _generate_all_sections). Yields a `section_done` event for each
-    section, then a final `done` event with the complete summary payload. Yields
-    an `error` event instead if generation fails (e.g. every model's daily
-    quota is exhausted).
+    The summary is generated in one consolidated model call, so the stream
+    yields real checkpoints the frontend can sync to: a `stage: generating`
+    event right before the model call (with the model name and whether the
+    context was truncated), then a single `done` event carrying the complete
+    structured payload (or `error` if generation fails, e.g. every model's
+    daily quota is exhausted). A cache hit skips straight to `done`.
     """
     cached = _cache_get(text)
     if cached:
@@ -551,18 +458,19 @@ def stream_summarize_paper(text: str, title: str = "", abstract: str = ""):
         yield {"type": "done", "result": result}
         return
 
+    yield {
+        "type": "stage",
+        "stage": "generating",
+        "model": GROQ_MODEL,
+        "truncated": len(text) > SECTION_CONTEXT_CHARS,
+    }
+
     try:
-        condensed_text = _prepare_section_context(text)
-        data = _generate_all_sections(condensed_text, title=title, abstract=abstract)
-        sections = _polish_sections(data, condensed_text, title=title, abstract=abstract)
+        result = _generate_paper_summary(text, title=title, abstract=abstract, source=source)
     except Exception as e:
         yield {"type": "error", "detail": str(e)}
         return
 
-    for k in _SECTION_ORDER:
-        yield {"type": "section_done", "section": k, "content": sections.get(k, "")}
-
-    result = {k: (v if v else "Data not provided by the model.") for k, v in sections.items()}
     result["full_text"] = text
     _cache_put(text, result)
     yield {"type": "done", "result": result}

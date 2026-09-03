@@ -43,17 +43,21 @@ def test_summarize_success(client, monkeypatch):
         "authors": ["Jane Doe"], "year": "2025", "journal": "J of Tests", "cited_by": 3,
         "full_text": "word " * 100,
     })
-    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="": {
-        "summary": "A summary.", "methodology": "A method.",
-        "research_gaps": "Some gaps.", "findings": "Some findings.",
-        "future_work": "Future work.", "full_text": text,
+    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="", source="": {
+        "title": "Model Title", "authors": ["Model Author"],
+        "one_line_summary": "One line.", "field_tags": ["ML"],
+        "overview": "An overview.", "problem_statement": "A problem.",
+        "approach": "An approach.", "key_findings": [{"finding": "F", "detail": "D"}],
+        "results_table": [], "significance": "Significant.",
+        "limitations": [], "future_work": [], "key_terms": [],
+        "confidence_notes": "", "full_text": text,
     })
     res = client.post("/summarize", files={"file": ("paper.pdf", b"%PDF-1.4 fake", "application/pdf")})
     assert res.status_code == 200
     data = res.json()
-    assert data["title"] == "Test Paper"
-    assert data["summary"] == "A summary."
-    assert data["authors"] == ["Jane Doe"]
+    assert data["title"] == "Test Paper"  # pipeline-extracted title wins
+    assert data["overview"] == "An overview."
+    assert data["authors"] == ["Jane Doe"]  # Crossref-verified authors win
     assert data["cited_by"] == 3
 
 
@@ -82,6 +86,22 @@ def test_chat_success(client, monkeypatch):
     res = client.post("/chat", json={"paper_text": "text", "question": "why?", "chat_history": []})
     assert res.status_code == 200
     assert res.json()["answer"] == "Because of self-attention."
+
+
+def test_ground_citations_maps_quotes_to_pages():
+    from api import _ground_citations
+    payload = {"key_findings": [
+        {"finding": "A", "quote": "The quick brown fox jumps over the lazy dog"},
+        {"finding": "B", "quote": "This quote appears nowhere in the document"},
+        {"finding": "C", "quote": ""},
+    ]}
+    text = "First page filler words here.\nSecond page: the quick brown fox jumps over the lazy dog."
+    spans = [[0, 30], [30, len(text)]]
+    _ground_citations(payload, text, spans)
+    assert payload["key_findings"][0]["citation"] == {"verified": True, "page": 2}
+    assert payload["key_findings"][1]["citation"]["verified"] is False
+    assert payload["key_findings"][2]["citation"]["verified"] is False
+    assert payload["grounded_citations"] == 1
 
 
 def test_daily_usage_limit(tmp_path, monkeypatch):
