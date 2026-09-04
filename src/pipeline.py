@@ -157,6 +157,18 @@ def _build_page_text(page_texts: list) -> tuple:
     return cleaned, spans
 
 
+def normalize_doi(raw: str) -> str:
+    """Clean a user-supplied DOI: pull it out of URLs (doi.org/..., dx.doi.org/...),
+    strip 'doi:' labels, whitespace and trailing punctuation."""
+    s = (raw or "").strip()
+    m = re.search(r"10\.\d{4,9}/\S+", s, flags=re.I)
+    if m:
+        s = m.group(0)
+    else:
+        s = re.sub(r"^doi\s*:\s*", "", s, flags=re.I).strip()
+    return s.rstrip(".,;")
+
+
 def process_input(pdf_path=None, doi=None, email=None):
     if pdf_path:
         try:
@@ -188,7 +200,20 @@ def process_input(pdf_path=None, doi=None, email=None):
         return meta
 
     elif doi:
-        pdf_url = get_pdf_url_from_doi(doi, email or UNPAYWALL_EMAIL)
+        doi = normalize_doi(doi)
+        if not doi:
+            return {
+                "source": "error",
+                "title": "", "abstract": "", "full_text": "",
+                "error": "That doesn't look like a valid DOI. It should look like 10.1234/abcdef — or upload the PDF directly.",
+            }
+
+        try:
+            pdf_url = get_pdf_url_from_doi(doi, email or UNPAYWALL_EMAIL)
+        except Exception as e:
+            # Unpaywall unreachable → still try Crossref below instead of failing
+            print("Unpaywall lookup failed:", e)
+            pdf_url = None
 
         if pdf_url:
             try:
@@ -202,7 +227,11 @@ def process_input(pdf_path=None, doi=None, email=None):
             except Exception as e:
                 print("PDF download/parsing failed:", e)
 
-        meta = get_metadata_from_doi_crossref(doi)
+        try:
+            meta = get_metadata_from_doi_crossref(doi)
+        except Exception as e:
+            print("Crossref lookup failed:", e)
+            meta = {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
         abstract = (meta.get("abstract") or "").strip()
         if abstract:
             meta.update({

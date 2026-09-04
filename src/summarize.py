@@ -18,7 +18,7 @@ LOCAL_MODEL = "llama3.2:1b"
 
 GROQ_MODEL = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
-GROQ_THIRD_MODEL = "qwen/qwen3.8-27b"
+GROQ_THIRD_MODEL = "qwen/qwen3-32b"  # real Groq model id (qwen3.8-27b does not exist)
 # Each model has its OWN daily token budget on Groq's free tier. When one model
 # is exhausted (daily quota), the next one still works — so instead of failing
 # after one model's 429s, we rotate through the list below.
@@ -146,7 +146,7 @@ def _rate_limit_wait(error_msg: str) -> float:
     return 10.0
 
 
-def _ask_groq(messages: list, model: str = None, max_retries: int = 3) -> str:
+def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_tokens: int = None) -> str:
     from groq import Groq
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
@@ -183,6 +183,7 @@ def _ask_groq(messages: list, model: str = None, max_retries: int = 3) -> str:
                     model=candidate,
                     messages=messages,
                     temperature=0.3,
+                    **({"max_tokens": max_tokens} if max_tokens else {}),
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -406,36 +407,54 @@ def summarize_paper(text: str, session_id: str = None, title: str = "", abstract
     return result
 
 
+CHAT_SYSTEM_PROMPT = """You are a helpful assistant answering a reader's questions about a research paper they are viewing.
+Answer using ONLY the paper text provided. If the answer is not in the paper, say so honestly in one short sentence.
+Be direct and concise (under 150 words). Write plain conversational prose: no markdown headings, no bullet lists, no JSON, no meta commentary about being an AI."""
+
+
+def _clean_answer(text: str) -> str:
+    """Normalize a model answer: strip echoed labels and runaway whitespace."""
+    t = (text or "").strip()
+    t = re.sub(r"^(answer|response)\s*:\s*", "", t, flags=re.I)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 def answer_question(paper_text: str, question: str, chat_history: list = None) -> str:
-    history_text = ""
+    # keep only the last few exchanges and drop legacy error placeholders
+    # (e.g. "⚠️ Could not reach the server.") that would confuse the model
+    clean_history = []
     for msg in (chat_history or [])[-6:]:
+        content = str(msg.get("content", "")).strip()
+        if not content or content.startswith("⚠️"):
+            continue
         role = "User" if msg.get("role") == "user" else "Assistant"
-        history_text += f"{role}: {msg.get('content', '')}\n"
+        clean_history.append(f"{role}: {content}")
 
     history_block = ""
-    if history_text:
-        history_block = "Conversation so far:\n" + history_text + "\n"
+    if clean_history:
+        history_block = "Conversation so far:\n" + "\n".join(clean_history) + "\n\n"
 
-    condensed_text = paper_text[:15000]
-    prompt = f"""You are an expert AI research assistant answering questions about a research paper.
-Answer based ONLY on the paper text below. If the answer is not in the paper, say so honestly.
-Keep answers concise (under 200 words) and use plain text.
+    # the abstract + intro (start of the text) carries most answerable content;
+    # capping hard keeps the request well inside the per-minute token budget
+    condensed_text = paper_text[:12000]
+    prompt = f"""You are answering a question about a research paper.
+Answer based ONLY on the paper text below. If the answer is not in the paper, say so honestly in one short sentence.
+Keep the answer concise (under 150 words) and use plain conversational prose.
 
 {history_block}Paper text:
 {condensed_text}
 
-Question: {question}
-
-Answer:"""
+Question: {question}"""
     try:
         try:
             messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": CHAT_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
-            return _ask_groq(messages).strip()
+            return _clean_answer(_ask_groq(messages, max_tokens=700))
         except Exception:
-            return _ask_ollama(prompt, json_mode=False).strip()
+            return _clean_answer(_ask_ollama(prompt, json_mode=False))
     except Exception as e:
         raise Exception(f"Local LLM Error - {str(e)}")
 

@@ -20,6 +20,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  /* the app themes itself via body.dark — forbid UA/extension force-darkening
+     (Brave auto-dark, Dark Reader, etc.) from inverting buttons on hover */
+  :root { color-scheme: only light; }
   body.dark { background: #0d1f36; }
 
   /* ── sky / hero (keep professional blue background, remove decorative trees/clouds) ──────── */
@@ -117,7 +120,7 @@
   .usage-chip.warn { color: #b45309; }
 
   /* ── single-column workflow ────────── */
-  .workflow { max-width: none; margin: 0; padding: 10px 6px 14px; }
+  .workflow { max-width: none; margin: 0; padding: 14px 24px 18px; }
   .step-label {
     display: flex; align-items: center; gap: 9px;
     font-size: 11px; font-weight: 600; color: #9ca3af;
@@ -228,7 +231,7 @@
   .paper-title { font-size: 1.18rem; font-weight: 700; color: #1c1917; margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.3; }
   .paper-authors { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .86rem; color: #6b7280; margin: -5px 0 10px; letter-spacing: -0.005em; }
   .paper-authors i { font-size: 15px; color: #9ca3af; }
-  .paper-header { position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 0 8px; margin: 0 0 6px; border-bottom: 1px solid #f0f1f2; }
+  .paper-header { position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 0 12px; margin: 0; border-bottom: 1px solid #f0f1f2; }
   .paper-institutions { color: #9ca3af; font-weight: 400; }
   .pub-badge { color: #6b7280; font-size: 12.5px; font-weight: 500; }
   .tag-accent { color: #374151; }
@@ -332,6 +335,11 @@
   .chat-typing span:nth-child(2) { animation-delay: .2s; }
   .chat-typing span:nth-child(3) { animation-delay: .4s; }
   @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+  .chat-bubble code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .chat-bubble.chat-error {
+    background: #fdeee8; border: 1px solid #f5c8b8; color: #b04040;
+    max-width: 84%; margin-left: auto; font-size: 12.5px;
+  }
 
   /* ── live progress panel ───────────── */
   .progress-panel {
@@ -339,26 +347,72 @@
   }
   .progress-head {
     display: flex; justify-content: space-between; align-items: baseline;
-    gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
   }
-  .progress-title { font-size: 13px; font-weight: 500; color: #374151; letter-spacing: -0.005em; }
+  .progress-title { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; color: #374151; letter-spacing: -0.005em; }
+  .progress-title .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #1c1917; flex-shrink: 0;
+    animation: pulseDot 1.6s ease-in-out infinite;
+  }
+  @keyframes pulseDot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, .18); }
+    50%      { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); }
+  }
+  .progress-panel.finished .pulse-dot { animation: none; background: #a8a29e; box-shadow: none; }
   .progress-meta { font-size: 12px; color: #9ca3af; display: flex; gap: 14px; white-space: nowrap; }
   .progress-meta #pg-count { font-weight: 600; color: #3b6ea5; }
-  .pg-bar { height: 2px; background: #e9eaeb; overflow: hidden; margin-bottom: 14px; }
+  .pg-bar {
+    height: 6px; border-radius: 999px; background: #e9eaeb;
+    overflow: hidden; margin-bottom: 16px;
+  }
   .pg-bar .fill {
-    height: 100%; width: 0%;
+    position: relative; overflow: hidden;
+    height: 100%; width: 0%; border-radius: 999px;
     background: #1c1917;
     transition: width .5s cubic-bezier(.16,1,.3,1);
   }
+  .pg-bar .fill::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+    transform: translateX(-100%);
+    animation: fillSheen 1.8s ease-in-out infinite;
+  }
+  .progress-panel.finished .pg-bar .fill::after { animation: none; opacity: 0; }
+  @keyframes fillSheen { to { transform: translateX(100%); } }
+  /* shimmering skeleton preview of the incoming summary */
+  .skel-card {
+    border-top: 1px solid #e9eaeb; padding: 18px 0 20px;
+    animation: cardLive .5s cubic-bezier(.16,1,.3,1) both;
+  }
+  .skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; margin-top: 4px; }
+  .skel-line { position: relative; overflow: hidden; border-radius: 4px; background: #eef0f2; }
+  .skel-line::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+    transform: translateX(-100%);
+    animation: fillSheen 1.4s ease-in-out infinite;
+  }
+  .skel-label { width: 110px; height: 10px; margin-bottom: 14px; }
+  .skel-text { height: 11px; margin-bottom: 9px; }
+  .skel-text.short { width: 62%; margin-bottom: 0; }
+  @media (max-width: 760px) { .skel-grid { grid-template-columns: 1fr; } }
   .result-card-body .empty-note, .result-card-body.empty-note { color: #9ca3af; font-style: italic; font-size: .92rem; }
-  .pstage-row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .pstage-row { display: flex; gap: 24px; flex-wrap: wrap; }
   .pstage {
+    display: inline-flex; align-items: center; gap: 8px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 11px; font-weight: 500; color: #b0b8c1;
+    font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+    color: #b3bac2;
     transition: color .25s;
   }
+  .pstage::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; flex-shrink: 0; transition: opacity .25s; }
   .pstage.active { color: #1c1917; }
-  .pstage.done { color: #c6c6c6; text-decoration: line-through; }
+  .pstage.active::before { background: #1c1917; opacity: 1; animation: pulseDot 1.6s ease-in-out infinite; }
+  .pstage.done { color: #a8a29e; text-decoration: line-through; }
+  .pstage.done::before { background: #a8a29e; opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .pg-bar .fill::after, .skel-line::after, .progress-title .pulse-dot, .pstage.active::before { animation: none !important; }
+  }
   .load-sections {
     margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px;
   }
@@ -406,7 +460,7 @@
     animation: screenIn .35s cubic-bezier(.16,1,.3,1) both;
   }
   @keyframes screenIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-  #output-scroll { height: 100%; overflow-y: auto; padding: 0 32px 56px; scrollbar-width: thin; }
+  #output-scroll { height: 100%; overflow-y: auto; padding: 26px 32px 56px; scrollbar-width: thin; }
   body.screen .reading-room { gap: 26px; }
   body.screen .page-rail { width: min(38%, 500px); position: sticky; top: 0; }
   @media (max-width: 860px) { body.screen .page-rail { width: 100%; } }
@@ -475,19 +529,39 @@
     font-size: 11px; font-weight: 600; color: #6b7280;
     letter-spacing: .14em; text-transform: uppercase; margin-bottom: 10px;
   }
-  .recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .recent-block { flex: 1 1 100%; min-width: 0; }
+  /* 300px min keeps the grid at ≤3 columns for the ≤6-paper cap, so rows
+     always complete (6 = 3+3 / 3+3 / 6) — no empty gap on the right */
+  .recent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
   .recent-card {
+    position: relative; overflow: hidden;
     display: block; width: 100%; box-sizing: border-box;
     background: #fff; border: 1px solid #e9eaeb; border-radius: 10px;
     padding: 13px 15px; cursor: pointer; text-align: left;
-    transition: border-color .15s, box-shadow .15s, transform .15s;
+    transition: border-color .22s ease, box-shadow .22s ease, background .22s ease, transform .22s cubic-bezier(.16,1,.3,1);
     font: inherit;
   }
-  .recent-card:hover { border-color: #3b6ea5; box-shadow: 0 2px 10px rgba(59, 110, 165, .12); transform: translateY(-1px); }
+  /* accent bar that wipes in along the left edge on hover */
+  .recent-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #3b6ea5, #6b9fd4);
+    transform: scaleY(0); transform-origin: top;
+    transition: transform .25s cubic-bezier(.16,1,.3,1);
+  }
+  .recent-card:hover {
+    border-color: #9ec4e8; background: #f2f8fd;
+    box-shadow: 0 8px 20px rgba(59, 110, 165, .16), 0 2px 6px rgba(59, 110, 165, .10);
+    transform: translateY(-3px);
+  }
+  .recent-card:hover::before { transform: scaleY(1); }
+  .recent-card:active { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(59, 110, 165, .12); }
+  .recent-card:focus-visible { outline: 2px solid #3b6ea5; outline-offset: 2px; }
   .recent-card .rt {
     display: block; font-size: 13px; font-weight: 600; color: #1c1917; line-height: 1.45;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color .18s ease;
   }
+  .recent-card:hover .rt { color: #2c5282; }
   .recent-card .rm {
     display: flex; align-items: center; gap: 5px;
     font-size: 11px; color: #9ca3af; margin-top: 8px;
@@ -495,6 +569,14 @@
   .recent-card .rm i { font-size: 12px; flex-shrink: 0; }
   .recent-card .rm span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .recent-card .rm .rm-time { margin-left: auto; flex-shrink: 0; overflow: visible; }
+  /* open-affordance arrow that slides in on hover */
+  .recent-card .rc-go {
+    position: absolute; top: 11px; right: 11px;
+    font-size: 14px; color: #3b6ea5;
+    opacity: 0; transform: translate(-5px, 5px);
+    transition: opacity .2s ease, transform .2s cubic-bezier(.16,1,.3,1);
+  }
+  .recent-card:hover .rc-go { opacity: 1; transform: translate(0, 0); }
 
   /* ── animations ────────────────────── */
   .result-card { animation: cardRise .42s cubic-bezier(.16,1,.3,1) backwards; }
@@ -508,7 +590,7 @@
     .stage { padding: 0 14px; margin-top: 38px; }
     .app-card { border-radius: 14px; }
     .card-head { padding: 12px 16px 11px; }
-    .workflow { padding: 8px 2px 10px; }
+    .workflow { padding: 8px 14px 12px; }
     .input-panel { padding: 18px 16px 20px; }
     .dropzone { padding: 16px 18px; gap: 12px; }
     .dropzone > i { font-size: 20px; }
@@ -639,15 +721,24 @@
   body.dark .chat-input-row i:hover { color: #6b9fd4; }
   body.dark .chip { background: #28231e; color: #6b7280; border-color: #3d3830; }
   body.dark .chip:hover { background: #332d28; }
+  body.dark .chat-bubble code { background: #28231e; }
+  body.dark .chat-bubble.chat-error { background: #3a1818; border-color: #5a2a2a; color: #e07070; }
   body.dark .chat-typing span { background: #3d3830; }
   body.dark .progress-title { color: #c8c4be; }
+  body.dark .progress-title .pulse-dot { background: #c8c4be; }
+  body.dark .progress-panel.finished .pulse-dot { background: #6b7280; }
   body.dark .progress-meta { color: #4b5563; }
   body.dark .progress-meta #pg-count { color: #6b9fd4; }
   body.dark .pg-bar { background: #28231e; }
   body.dark .pg-bar .fill { background: #e7e5e4; }
-  body.dark .pstage { color: #4b5563; }
+  body.dark .skel-card { border-top-color: #2c2822; }
+  body.dark .skel-line { background: #26211c; }
+  body.dark .skel-line::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent); }
+  body.dark .pstage { color: #55524c; }
   body.dark .pstage.active { color: #e7e5e4; }
-  body.dark .pstage.done { color: #3a3530; }
+  body.dark .pstage.active::before { background: #c8c4be; }
+  body.dark .pstage.done { color: #6b7280; }
+  body.dark .pstage.done::before { background: #6b7280; }
   body.dark .load-section { color: #4b5563; }
   body.dark .load-section.done { color: #5a9448; }
   body.dark .error-box { background: #3a1818; color: #e07070; border-color: #5a2a2a; }
@@ -655,7 +746,13 @@
   body.dark .card-footer { background: #161412; border-color: #2c2822; }
   body.dark .card-footer-brand { color: #3d3830; }
   body.dark .recent-card { background: #1e1a17; border-color: #2c2822; }
-  body.dark .recent-card:hover { border-color: #6b9fd4; box-shadow: 0 2px 10px rgba(0, 0, 0, .5); }
+  body.dark .recent-card::before { background: linear-gradient(180deg, #6b9fd4, #8db8e8); }
+  body.dark .recent-card:hover {
+    border-color: #3a5570; background: #212a38;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .45), 0 4px 18px rgba(107, 159, 212, .12);
+  }
+  body.dark .recent-card:hover .rt { color: #cfe2f7; }
+  body.dark .recent-card .rc-go { color: #8db8e8; }
   body.dark .recent-card .rt { color: #e7e5e4; }
   body.dark .recent-card .rm { color: #6b7280; }
 
@@ -742,6 +839,10 @@
   }
   .page-text { font-size: 11.5px; line-height: 1.7; color: #4b5563; white-space: pre-wrap; word-break: break-word; }
   .summary-pane { flex: 1; min-width: 0; }
+  /* in focus mode the summary pane must stretch to the full height of the
+     reading room — with align-items:flex-start it collapses to its content
+     height and the sticky .paper-header has no travel room (scrolls away) */
+  body.screen .summary-pane { align-self: stretch; }
   @media (max-width: 900px) {
     .reading-room { flex-direction: column; }
     .page-rail { position: static; width: 100%; max-height: 420px; order: 2; }
@@ -833,14 +934,9 @@
 
           <div id="tab-doi" class="tab-content">
             <input type="text" id="doi-input" placeholder="e.g. 10.1371/journal.pone.0121283">
-            <div style="display:flex; gap:8px;">
-              <button onclick="summarizeDoi()" style="flex:1;justify-content:center;padding:12px;">
-                Summarize paper
-              </button>
-              <button class="secondary" onclick="fillExampleDoi()" title="Fill with an example DOI">
-                <i class="ti ti-wand"></i>
-              </button>
-            </div>
+            <button onclick="summarizeDoi()" style="width:100%;justify-content:center;padding:12px;">
+              Summarize paper
+            </button>
           </div>
         </div>
 
@@ -1001,7 +1097,7 @@ function showLoading() {
   document.getElementById('results-area').innerHTML = `
     <div class="progress-panel">
       <div class="progress-head">
-        <div class="progress-title" id="pg-title">Extracting paper text</div>
+        <div class="progress-title" id="pg-title"><span class="pulse-dot" aria-hidden="true"></span><span id="pg-title-text">Extracting paper text</span></div>
         <div class="progress-meta">
           <span id="pg-elapsed">0s</span>
         </div>
@@ -1013,12 +1109,26 @@ function showLoading() {
         <span class="pstage" id="pstage-done">03 Done</span>
       </div>
     </div>
-    <div class="results" id="live-results"></div>`;
+    <div class="results" id="live-results">
+      <div class="skel-card" aria-hidden="true">
+        <div class="skel-line skel-label"></div>
+        <div class="skel-line skel-text"></div>
+        <div class="skel-line skel-text"></div>
+        <div class="skel-line skel-text short"></div>
+      </div>
+      <div class="skel-grid" aria-hidden="true">
+        <div class="skel-card"><div class="skel-line skel-label"></div><div class="skel-line skel-text"></div><div class="skel-line skel-text short"></div></div>
+        <div class="skel-card"><div class="skel-line skel-label"></div><div class="skel-line skel-text"></div><div class="skel-line skel-text short"></div></div>
+      </div>
+    </div>`;
   // Lightweight ticker: elapsed time only. Every bar movement and status
   // change is driven by real backend events (meta / stage / done).
   loadTimer = setInterval(() => {
     const el = document.getElementById('pg-elapsed');
-    if (el) el.textContent = `${Math.round((Date.now() - t0) / 1000)}s`;
+    if (!el) return;
+    const secs = Math.floor((Date.now() - t0) / 1000);
+    // stay in seconds for the first minute, then switch to m:ss
+    el.textContent = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   }, 1000);
   // the output screen shows the progress panel from its top
   enterFocus();
@@ -1042,7 +1152,7 @@ function stageWriting(model, truncated) {
   }
   const write = document.getElementById('pstage-write');
   if (write) write.classList.add('active');
-  const title = document.getElementById('pg-title');
+  const title = document.getElementById('pg-title-text');
   if (title) {
     const bits = [];
     if (model) bits.push(model);
@@ -1066,8 +1176,10 @@ function stageDone() {
   }
   const done = document.getElementById('pstage-done');
   if (done) done.classList.add('done');
-  const title = document.getElementById('pg-title');
+  const title = document.getElementById('pg-title-text');
   if (title) title.textContent = 'Summary ready';
+  const panel = document.querySelector('.progress-panel');
+  if (panel) panel.classList.add('finished');
   const fill = document.getElementById('pg-fill');
   if (fill) {
     fill.style.transition = 'width .25s ease';
@@ -1175,9 +1287,24 @@ async function summarizePdf() {
   await runSummarize(formData, selectedFile.name);
 }
 
+// pull a bare DOI out of whatever the user pasted: full URLs (doi.org,
+// dx.doi.org, hdl.handle.net...), "doi:" prefixes, stray whitespace/punctuation
+function normalizeDoi(raw) {
+  let s = String(raw || '').trim();
+  const m = s.match(/10\.\d{4,9}\/\S+/i);
+  if (m) return m[0].replace(/[.,;]+$/, '');
+  return s.replace(/^doi\s*:\s*/i, '').trim().replace(/[.,;]+$/, '');
+}
+
 async function summarizeDoi() {
-  const doi = document.getElementById('doi-input').value.trim();
-  if (!doi) return;
+  const input = document.getElementById('doi-input');
+  const doi = normalizeDoi(input.value);
+  input.value = doi;
+  if (!/^10\.\d{4,9}\/\S+$/i.test(doi)) {
+    input.style.borderColor = '#e07070';
+    setTimeout(() => { input.style.borderColor = ''; }, 1600);
+    return;
+  }
   const formData = new FormData();
   formData.append('doi', doi);
   await runSummarize(formData, doi);
@@ -1243,6 +1370,7 @@ function renderRecent() {
         : (p.doi ? `<i class="ti ti-link"></i><span>DOI: ${escapeHtml(p.doi)}</span>` : '<i class="ti ti-file-text"></i><span>paper</span>');
       const when = p.ts ? `<span class="rm-time"><i class="ti ti-clock"></i> ${_timeAgo(p.ts)}</span>` : '';
       return `<button class="recent-card" onclick="openRecent(${i})" title="Open this summary">
+                <i class="ti ti-arrow-up-right rc-go" aria-hidden="true"></i>
                 <span class="rt">${label}</span>
                 <span class="rm">${src}${when}</span>
               </button>`;
@@ -1722,9 +1850,6 @@ function downloadMarkdown() {
   link.click();
 }
 
-function fillExampleDoi() {
-  document.getElementById('doi-input').value = '10.1371/journal.pone.0121283';
-}
 
 async function sendChat() {
   const input = document.getElementById('chat-input');
@@ -1740,27 +1865,55 @@ async function sendChat() {
   box.insertAdjacentHTML('beforeend', '<div class="chat-bubble assistant chat-typing" id="chat-typing"><span></span><span></span><span></span></div>');
   box.scrollTop = box.scrollHeight;
 
-  const answer = await askChatWithRetry(question);
-  chatHistory.push({ role: 'assistant', content: answer });
-  renderChat();
+  const res = await askChatWithRetry(question);
+  if (res.ok) {
+    chatHistory.push({ role: 'assistant', content: res.answer });
+    renderChat();
+  } else {
+    // show the error, but keep it OUT of chatHistory so a failed exchange
+    // never leaks into the model's context on the next question
+    renderChat();
+    const msgBox = document.getElementById('chat-messages');
+    msgBox.insertAdjacentHTML('beforeend', `<div class="chat-bubble chat-error"><i class="ti ti-alert-circle"></i> ${escapeHtml(res.message)}</div>`);
+    msgBox.scrollTop = msgBox.scrollHeight;
+  }
+}
+
+function friendlyChatError(status, detail) {
+  const d = String(detail || '');
+  if (status === 429 || /quota|rate limit|tokens per day/i.test(d))
+    return 'The AI provider is rate-limited right now. Wait a minute and try again.';
+  if (status === 503 || /ollama/i.test(d))
+    return 'The AI backend is unavailable. Please try again shortly.';
+  if (status === 400) return d || 'Invalid request.';
+  if (status >= 500) return 'The AI backend could not answer that. Please try again in a moment.';
+  return d || 'Something went wrong. Please try again.';
 }
 
 async function askChatWithRetry(question, attempts = 2) {
+  // the backend only reads the first ~12k chars of the paper — don't ship
+  // hundreds of KB of text with every message
+  const paperExcerpt = (currentPaperText || '').slice(0, 15000);
+  // keep failed exchanges and error placeholders out of the model's context
+  const history = chatHistory
+    .filter(m => m.content && !String(m.content).startsWith('⚠️'))
+    .slice(-6);
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paper_text: currentPaperText, question: question, chat_history: chatHistory }),
+        body: JSON.stringify({ paper_text: paperExcerpt, question: question, chat_history: history }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) return data.answer;
-      // Client errors (400/429/etc.) won't get better on retry
-      if (res.status < 500) return `⚠️ ${data.detail || 'Something went wrong. Please try again.'}`;
+      if (res.ok && data.answer) return { ok: true, answer: data.answer };
+      // 4xx (except 429) won't get better on retry
+      if (res.status < 500 && res.status !== 429)
+        return { ok: false, message: friendlyChatError(res.status, data.detail) };
     } catch (e) { /* network error → retry */ }
     if (i < attempts - 1) await new Promise(r => setTimeout(r, 900));
   }
-  return '⚠️ Could not reach the server. Please try again.';
+  return { ok: false, message: 'Could not reach the AI backend. Please try again.' };
 }
 
 function askSuggestion(question) {
@@ -1855,10 +2008,22 @@ function toggleTheme() {
 
 function renderChat() {
   document.getElementById('chat-messages').innerHTML = chatHistory
-    .map(m => `<div class="chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`)
+    .map(m => `<div class="chat-bubble ${m.role}">${m.role === 'assistant' ? fmtAnswer(m.content) : escapeHtml(m.content)}</div>`)
     .join('');
   const box = document.getElementById('chat-messages');
   box.scrollTop = box.scrollHeight;
+}
+
+// minimal, safe markdown for assistant answers: **bold**, `code`, # headings,
+// "- " bullets and line breaks (input is already HTML-escaped)
+function fmtAnswer(text) {
+  let s = escapeHtml(text);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/^#{1,4}\s+(.+)$/gm, '<strong>$1</strong>');
+  s = s.replace(/^[-*]\s+(.+)$/gm, '&bull; $1');
+  s = s.replace(/\n/g, '<br>');
+  return s;
 }
 </script>
 
