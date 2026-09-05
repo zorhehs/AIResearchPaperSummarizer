@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import logging
 import re
 import uuid
 
@@ -15,7 +16,10 @@ from pipeline import process_input
 from summarize import summarize_paper, stream_summarize_paper, answer_question
 from user_session import (
     check_and_increment_usage,
+    check_and_increment_ip_usage,
     refund_usage,
+    refund_ip_usage,
+    client_ip,
     init_db,
     router as user_router,
 )
@@ -43,6 +47,13 @@ def _set_session_cookie(resp: Response, session_id: str):
         max_age=60 * 60 * 24 * 365,
         httponly=True,
     )
+
+# uvicorn configures its own loggers but not the root one, so without this
+# the application modules' log lines would be dropped entirely.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+)
 
 app = FastAPI(title="AI Research Paper Summarizer")
 
@@ -140,10 +151,15 @@ async def summarize(
         raise HTTPException(status_code=400, detail="Provide either a PDF file or a DOI.")
 
     session_id = _read_or_create_session(request)
+    ip = client_ip(request)
 
+    # The address backstop is checked first so a client that cycles cookies to
+    # dodge the session limit still runs into it (no-op unless configured).
+    check_and_increment_ip_usage(ip)
     try:
         check_and_increment_usage(session_id)
     except HTTPException:
+        refund_ip_usage(ip)
         raise
 
     saved_path = None
@@ -204,6 +220,7 @@ async def summarize(
         # caller actually got a summary out of it.
         if not delivered:
             refund_usage(session_id)
+            refund_ip_usage(ip)
         if saved_path and os.path.exists(saved_path):
             os.remove(saved_path)
 
@@ -221,10 +238,15 @@ async def summarize_stream(
         raise HTTPException(status_code=400, detail="Provide either a PDF file or a DOI.")
 
     session_id = _read_or_create_session(request)
+    ip = client_ip(request)
 
+    # The address backstop is checked first so a client that cycles cookies to
+    # dodge the session limit still runs into it (no-op unless configured).
+    check_and_increment_ip_usage(ip)
     try:
         check_and_increment_usage(session_id)
     except HTTPException:
+        refund_ip_usage(ip)
         raise
 
     saved_path = None
@@ -277,9 +299,11 @@ async def summarize_stream(
                         event = {**event, "result": merged}
                     if event.get("type") == "error":
                         refund_usage(session_id)
+                        refund_ip_usage(ip)
                     yield f"data: {json.dumps(event)}\n\n"
             except Exception as e:
                 refund_usage(session_id)
+                refund_ip_usage(ip)
                 yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
 
         streaming = True
@@ -289,6 +313,7 @@ async def summarize_stream(
         # running are refunded inside event_source() instead.
         if not streaming:
             refund_usage(session_id)
+            refund_ip_usage(ip)
         if saved_path and os.path.exists(saved_path):
             os.remove(saved_path)
 
