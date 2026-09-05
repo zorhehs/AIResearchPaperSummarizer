@@ -6,7 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from extract import extract_page_texts, PDFExtractionError, extract_pdf_metadata
+from extract import (
+    extract_page_texts,
+    ocr_page_texts,
+    ocr_available,
+    PDFExtractionError,
+    extract_pdf_metadata,
+)
 from clean import clean_text
 from metadata import extract_metadata
 from fetch_doi import get_pdf_url_from_doi
@@ -16,6 +22,14 @@ from fetch_doi import get_pdf_url_from_doi
 # falls through to Crossref, rather than sending every deployment's traffic
 # under one person's address.
 UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "").strip()
+
+# Scanned papers are OCR'd automatically when Tesseract is available. Set
+# ENABLE_OCR=0 to keep the old behaviour (an honest error instead of a slow
+# fallback) on deployments where the extra seconds per page are not welcome.
+ENABLE_OCR = (os.getenv("ENABLE_OCR", "1") or "1").strip().lower() not in {"0", "false", "no"}
+
+# Below this many characters a PDF is treated as having no usable text layer.
+MIN_USABLE_TEXT = 50
 
 
 def _parse_crossref_item(data: dict) -> dict:
@@ -187,20 +201,36 @@ def process_input(pdf_path=None, doi=None, email=None):
             }
 
         cleaned, page_spans = _build_page_text(page_texts)
-        if len(cleaned.strip()) < 50:
+        source = "pdf"
+
+        # No text layer — almost always a scan. Try OCR before giving up.
+        if len(cleaned.strip()) < MIN_USABLE_TEXT and ENABLE_OCR and ocr_available():
+            try:
+                ocr_texts = ocr_page_texts(pdf_path)
+                ocr_cleaned, ocr_spans = _build_page_text(ocr_texts)
+                if len(ocr_cleaned.strip()) >= MIN_USABLE_TEXT:
+                    cleaned, page_spans, source = ocr_cleaned, ocr_spans, "pdf_ocr"
+            except Exception as e:
+                print("OCR failed:", e)
+
+        if len(cleaned.strip()) < MIN_USABLE_TEXT:
+            if not ENABLE_OCR:
+                why = "OCR is disabled on this server (ENABLE_OCR=0)."
+            elif not ocr_available():
+                why = ("This looks like a scanned PDF, and OCR is unavailable here "
+                       "(Tesseract is not installed or its language data is missing).")
+            else:
+                why = "This looks like a scanned PDF, but OCR could not read any text from it."
             return {
                 "source": "error",
                 "title": "",
                 "abstract": "",
                 "full_text": "",
-                "error": (
-                    f"'{pdf_path}' appears to have no extractable text. "
-                    f"This may be a scanned PDF that needs OCR, which isn't supported yet."
-                ),
+                "error": f"'{os.path.basename(pdf_path)}' has no extractable text. {why}",
             }
 
         meta = _finalize_pdf_meta(extract_metadata(cleaned), pdf_path)
-        meta.update({"source": "pdf", "full_text": cleaned, "page_spans": page_spans})
+        meta.update({"source": source, "full_text": cleaned, "page_spans": page_spans})
         return meta
 
     elif doi:
