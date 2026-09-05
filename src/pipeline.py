@@ -6,12 +6,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from extract import extract_text, extract_page_texts, PDFExtractionError, extract_pdf_metadata
+from extract import extract_page_texts, PDFExtractionError, extract_pdf_metadata
 from clean import clean_text
 from metadata import extract_metadata
 from fetch_doi import get_pdf_url_from_doi
 
-UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "zorhehs@gmail.com")
+# Unpaywall wants a contact address identifying whoever is calling it. There
+# is deliberately no default: an unset value skips the Unpaywall lookup and
+# falls through to Crossref, rather than sending every deployment's traffic
+# under one person's address.
+UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "").strip()
 
 
 def _parse_crossref_item(data: dict) -> dict:
@@ -208,12 +212,17 @@ def process_input(pdf_path=None, doi=None, email=None):
                 "error": "That doesn't look like a valid DOI. It should look like 10.1234/abcdef — or upload the PDF directly.",
             }
 
-        try:
-            pdf_url = get_pdf_url_from_doi(doi, email or UNPAYWALL_EMAIL)
-        except Exception as e:
-            # Unpaywall unreachable → still try Crossref below instead of failing
-            print("Unpaywall lookup failed:", e)
+        contact_email = email or UNPAYWALL_EMAIL
+        if not contact_email:
+            print("UNPAYWALL_EMAIL is not set — skipping Unpaywall, using Crossref only.")
             pdf_url = None
+        else:
+            try:
+                pdf_url = get_pdf_url_from_doi(doi, contact_email)
+            except Exception as e:
+                # Unpaywall unreachable → still try Crossref below instead of failing
+                print("Unpaywall lookup failed:", e)
+                pdf_url = None
 
         if pdf_url:
             try:

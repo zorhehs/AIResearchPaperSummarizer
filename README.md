@@ -12,11 +12,12 @@ The backend is FastAPI; the frontend is a single-file vanilla-JS page. No build 
 - **Paper chat** — ask the paper questions and get answers grounded in its text.
 - **DOI support** — Unpaywall resolves open-access PDFs; Crossref supplies authors, year, journal, and citation counts where available.
 - **Caching** — the same paper text always hashes to the same key, so re-summarizing an identical paper is served from SQLite and costs nothing.
-- **Daily limit** — 5 summaries per session per day, tracked by cookie.
+- **Daily limit** — 5 summaries per session per day, tracked by cookie. Requests
+  that fail before producing a summary are refunded.
 
 ## How a summary is generated
 
-`src/pipeline.py` turns the input into clean text (plus per-page spans used for grounding). `src/summarize.py` then produces the summary on Groq — `openai/gpt-oss-20b` primary, with rotation to `gpt-oss-120b` and `qwen/qwen3.8-27b` when a model's free-tier daily quota is exhausted — and a local Ollama model as the last resort.
+`src/pipeline.py` turns the input into clean text (plus per-page spans used for grounding). `src/summarize.py` then produces the summary on Groq — `openai/gpt-oss-20b` primary, with rotation to `gpt-oss-120b` and `qwen/qwen3-32b` when a model's free-tier daily quota is exhausted — and a local Ollama model as the last resort.
 
 Two design choices exist mostly because of the Groq free tier:
 
@@ -32,15 +33,20 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
-Create a `.env` in the project root:
+Create a `.env` in the project root (see [.env.example](.env.example)):
 
 ```bash
 GROQ_API_KEY=gsk_...
-# optional — used for Unpaywall lookups
+# optional — your contact address, required by Unpaywall on every request
 UNPAYWALL_EMAIL=you@example.com
+# optional — where the SQLite file lives (default: ./users.db)
+DB_PATH=/absolute/path/to/users.db
 ```
 
-`GROQ_API_KEY` is what actually does the work; without it the app can only fall back to a local Ollama instance.
+`GROQ_API_KEY` is what actually does the work; without it the app can only fall
+back to a local Ollama instance. `UNPAYWALL_EMAIL` has no default — leave it
+unset and DOI lookups skip Unpaywall and use Crossref metadata alone, so
+open-access PDFs won't be fetched.
 
 ## Run
 
@@ -63,7 +69,9 @@ docker compose up --build
 ./venv/bin/python -m pytest tests/ -v
 ```
 
-37 tests, all offline — the DB is swapped for a temp file per test and the model API is never called.
+29 tests, all offline — the DB is swapped for a temp file per test and the
+model API is never called. They also run in CI on every push and pull
+request (`.github/workflows/tests.yml`).
 
 ## API
 
@@ -77,7 +85,7 @@ docker compose up --build
 | `GET /usage-status` | summaries used today for this session |
 | `POST /save-email` / `GET /get-email` | optional email capture |
 
-Input errors map to 400/404/422; provider quota problems map to 503.
+Input errors map to 400 (nothing supplied) and 422 (unreadable PDF, unresolvable DOI, no extractable text); hitting the daily limit maps to 429; provider quota problems map to 503. A request that fails before a summary is delivered does not consume one of the day's five summaries.
 
 ## Project layout
 
@@ -96,6 +104,9 @@ Input errors map to 400/404/422; provider quota problems map to 503.
 
 - **Quotes are only as reliable as the model.** Grounding is literal text search: a perfectly true finding whose quote the model slightly reworded will show as *unverified*. That's deliberate — the server won't pretend a quote checks out when it doesn't.
 - **The free tier shaped the code.** Per-minute and per-day token budgets are the reason for the single consolidated call, the input cap, and the model rotation. If you hit quota errors, that's the tier, not a bug.
+- **The daily limit is advisory, not a security control.** Identity is a cookie
+  and nothing else, so any client that discards cookies gets a fresh session and
+  an unlimited allowance. That is fine for a demo; putting this behind a real
+  quota would need accounts or IP-based limiting.
 - **Email capture stores the address and nothing else** — it isn't used for anything yet.
-- `src/map_reduce.py` is older experiment code and is not imported by the server.
-- No license has been chosen for this repo yet.
+- Licensed under the MIT License — see [LICENSE](LICENSE).

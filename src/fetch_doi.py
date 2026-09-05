@@ -1,8 +1,19 @@
+import os
+
 import requests
 from typing import Optional
 
 
-def get_pdf_url_from_doi(doi: str, email: str = "zorhehs@gmail.com") -> Optional[str]:
+def get_pdf_url_from_doi(doi: str, email: str) -> Optional[str]:
+    """Resolve a DOI to an open-access PDF URL via Unpaywall.
+
+    Unpaywall requires a contact address on every request; it identifies the
+    caller, so it has to come from the deploying operator's configuration
+    rather than being baked in here. Returns None when it is missing, which
+    lets the caller fall back to Crossref metadata.
+    """
+    if not (email or "").strip():
+        return None
     encoded_doi = requests.utils.quote(doi, safe="")
     url = f"https://api.unpaywall.org/v2/{encoded_doi}?email={email}"
     try:
@@ -34,5 +45,5 @@ if __name__ == "__main__":
     ]
 
     for doi in test_dois:
-        result = get_pdf_url_from_doi(doi)
+        result = get_pdf_url_from_doi(doi, os.getenv("UNPAYWALL_EMAIL", ""))
         print(f"{doi} -> {result}")
