@@ -1,10 +1,26 @@
 # AI Research Paper Summarizer
 
 [![tests](https://github.com/zorhehs/AIResearchPaperSummarizer/actions/workflows/tests.yml/badge.svg)](https://github.com/zorhehs/AIResearchPaperSummarizer/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 
 Upload a research paper (a PDF file, or just a DOI) and get a structured summary back: what the paper is about, the problem it tackles, the approach, the key findings with page-grounded quotes, the headline numbers, the limitations, and the future work. The same page also draws an interactive knowledge graph of the paper and lets you ask follow-up questions in chat.
 
 The backend is FastAPI; the frontend is a single-file vanilla-JS page. No build step, no npm, no separate client to deploy.
+
+## Contents
+
+- [Features](#features)
+- [How a summary is generated](#how-a-summary-is-generated)
+- [Setup](#setup)
+- [Run](#run)
+- [Tests](#tests)
+- [API](#api)
+- [Project layout](#project-layout)
+- [Notes](#notes)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -156,4 +172,11 @@ Input errors map to 400 (nothing supplied) and 422 (unreadable PDF, unresolvable
   OCR runs only when a PDF has no text layer, is capped at `OCR_MAX_PAGES`, and
   costs a few seconds per page.
 - **Email capture stores the address and nothing else** — it isn't used for anything yet.
-- Licensed under the MIT License — see [LICENSE](LICENSE).
+
+## Contributing
+
+Issues and pull requests are welcome. Both test suites (`pytest tests/ -v` and `node --test "tests/frontend/*.test.mjs"`) run in CI on every push and pull request — make sure they pass locally before opening one.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
