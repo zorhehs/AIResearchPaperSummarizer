@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: "22"
 
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
 
       # The suite is fully offline: the DB is a temp file per test and no model
       # API is called, so no secrets are needed here.
