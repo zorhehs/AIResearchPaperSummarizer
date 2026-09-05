@@ -8,12 +8,31 @@ import os
 
 router = APIRouter()
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "users.db")
+# Both the summary cache and the session/usage tables live in this SQLite file.
+# DB_PATH is env-overridable so a container can point it at a mounted volume;
+# without that the database would sit inside the image layer and be discarded
+# every time the container is recreated.
+DB_PATH = os.getenv("DB_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "users.db"
+)
 DAILY_LIMIT = 5  # summaries per session per day
 
 
+def _ensure_parent_dir(path: str):
+    """Create the directory holding the SQLite file if it is missing.
+
+    DB_PATH can point at a mounted volume path that does not exist yet on a
+    fresh host; sqlite3 will not create intermediate directories itself.
+    """
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+
 def init_db(db_path: str = None):
-    conn = sqlite3.connect(db_path or DB_PATH)
+    path = db_path or DB_PATH
+    _ensure_parent_dir(path)
+    conn = sqlite3.connect(path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             session_id TEXT PRIMARY KEY,
@@ -113,6 +132,31 @@ def check_and_increment_usage(session_id: str):
     )
     conn.commit()
     conn.close()
+
+
+def refund_usage(session_id: str):
+    """Give back a summary credit that was reserved but never delivered.
+
+    check_and_increment_usage() runs before the work starts, so a paper that
+    fails to extract or a provider outage would otherwise cost the caller one
+    of their daily summaries for nothing. Never drops below zero.
+    """
+    today = str(date.today())
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT count FROM usage WHERE session_id = ? AND usage_date = ?",
+            (session_id, today)
+        ).fetchone()
+        if not row or row[0] <= 0:
+            return
+        conn.execute(
+            "UPDATE usage SET count = ? WHERE session_id = ? AND usage_date = ?",
+            (row[0] - 1, session_id, today)
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 @router.get("/usage-status")
