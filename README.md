@@ -12,7 +12,7 @@ The backend is FastAPI; the frontend is a single-file vanilla-JS page. No build 
 - **Paper chat** — ask the paper questions and get answers grounded in its text.
 - **DOI support** — Unpaywall resolves open-access PDFs; Crossref supplies authors, year, journal, and citation counts where available.
 - **Scanned papers** — a PDF with no text layer is OCR'd automatically (Tesseract, via PyMuPDF). Page numbers survive OCR, so citation grounding still works.
-- **Caching** — the same paper text always hashes to the same key, so re-summarizing an identical paper is served from SQLite and costs nothing.
+- **Caching** — the same paper text always hashes to the same key, so re-summarizing an identical paper is served from SQLite and costs nothing. Crossref and Unpaywall lookups are cached too, so a repeated DOI does not re-hit either API.
 - **Daily limit** — 5 summaries per session per day, tracked by cookie. Requests
   that fail before producing a summary are refunded. An optional per-address
   backstop (`IP_DAILY_LIMIT`) bounds clients that discard cookies.
@@ -32,8 +32,11 @@ Python 3.11 recommended (the Docker image is `python:3.11-slim`).
 
 ```bash
 python3 -m venv venv
-./venv/bin/pip install -r requirements.txt
+./venv/bin/pip install -r requirements-dev.txt
 ```
+
+`requirements.txt` holds the runtime dependencies alone — that is what the
+Docker image installs. `requirements-dev.txt` adds the test tooling on top.
 
 Create a `.env` in the project root (see [.env.example](.env.example)):
 
@@ -49,6 +52,8 @@ TRUST_PROXY_HEADERS=0
 # optional — OCR for scanned PDFs; on when Tesseract is installed
 ENABLE_OCR=1
 OCR_MAX_PAGES=20
+# optional — application log level (default INFO)
+LOG_LEVEL=INFO
 ```
 
 For OCR of scanned PDFs, install Tesseract too (`brew install tesseract` on
@@ -86,7 +91,7 @@ docker compose up --build
 node --test "tests/frontend/*.test.mjs"
 ```
 
-52 Python tests and 24 frontend tests, all offline — the DB is swapped for a
+129 Python tests and 24 frontend tests, all offline — the DB is swapped for a
 temp file per test and the model API is never called. The OCR tests build a
 scanned PDF on the fly and skip themselves where Tesseract is missing.
 
@@ -123,6 +128,7 @@ Input errors map to 400 (nothing supplied) and 422 (unreadable PDF, unresolvable
 | `src/extract.py`, `src/clean.py`, `src/metadata.py` | PDF text extraction, cleaning, title detection |
 | `src/fetch_doi.py` | Unpaywall/Crossref lookups |
 | `src/user_session.py` | sessions, daily limits, email capture |
+| `src/cache.py` | TTL cache for Crossref/Unpaywall lookups |
 | `static/index.html` | the entire frontend |
 | `tests/` | pytest suite |
 | `tests/frontend/` | frontend tests + the sandbox harness |
@@ -130,6 +136,10 @@ Input errors map to 400 (nothing supplied) and 422 (unreadable PDF, unresolvable
 ## Notes
 
 - **Quotes are only as reliable as the model.** Grounding is literal text search: a perfectly true finding whose quote the model slightly reworded will show as *unverified*. That's deliberate — the server won't pretend a quote checks out when it doesn't.
+- **External lookups are cached for 30 days** (misses for 1 day, since a
+  paywalled paper may open up later). Transient failures — a timeout, a 5xx —
+  are deliberately not cached, so an outage is never remembered as a fact
+  about the paper.
 - **The free tier shaped the code.** Per-minute and per-day token budgets are the reason for the single consolidated call, the input cap, and the model rotation. If you hit quota errors, that's the tier, not a bug.
 - **The daily limit is advisory by default.** Identity is a cookie, so a client
   that discards cookies gets a fresh session and an unlimited allowance. Setting

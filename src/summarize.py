@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -12,6 +13,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 
 load_dotenv()
+
+log = logging.getLogger(__name__)
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 LOCAL_MODEL = "llama3.2:1b"
@@ -205,7 +208,8 @@ def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_token
                         break
                     if attempt == max_retries:
                         break
-                    print(f"  (rate limited, waiting {wait:.1f}s... {candidate} attempt {attempt}/{max_retries})")
+                    log.info("Rate limited on %s; waiting %.1fs (attempt %d/%d)",
+                             candidate, wait, attempt, max_retries)
                     time.sleep(wait)
                     continue
                 break  # other API error → try next model

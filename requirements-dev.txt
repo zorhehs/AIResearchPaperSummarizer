@@ -1,0 +1,4 @@
+# Test-only dependencies. The production image installs requirements.txt
+# alone, so nothing here ends up in a deployed container.
+-r requirements.txt
+pytest==8.4.2
