@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # The suite is fully offline: the DB is a temp file per test and no model
+      # API is called, so no secrets are needed here.
+      - run: python -m pytest tests/ -v

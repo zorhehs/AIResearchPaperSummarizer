@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   app:
     build: .
@@ -8,6 +6,9 @@ services:
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
+      # Keep the SQLite file (sessions, daily usage, summary cache) on the
+      # mounted volume — anywhere else and it dies with the container.
+      - DB_PATH=/app/data/users.db
     volumes:
       - app-data:/app/data
     restart: unless-stopped
