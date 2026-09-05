@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import logging
 import re
 import uuid
 
@@ -46,6 +47,13 @@ def _set_session_cookie(resp: Response, session_id: str):
         max_age=60 * 60 * 24 * 365,
         httponly=True,
     )
+
+# uvicorn configures its own loggers but not the root one, so without this
+# the application modules' log lines would be dropped entirely.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+)
 
 app = FastAPI(title="AI Research Paper Summarizer")
 
