@@ -235,3 +235,98 @@ def test_session_id_is_stable_across_requests(client):
     second = client.get("/health")
     assert second.cookies.get("session_id") is None
     assert client.cookies.get("session_id") == session_id
+
+
+# ---------------------------------------------------------------------------
+# Per-address backstop (opt-in via IP_DAILY_LIMIT)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def ok_paper(monkeypatch):
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "pdf", "title": "T", "abstract": "", "authors": [], "year": "",
+        "journal": "", "cited_by": None, "full_text": "word " * 100,
+    })
+    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="", source="": {
+        "title": "T", "authors": [], "one_line_summary": "x", "field_tags": [],
+        "overview": "o", "problem_statement": "p", "approach": "a",
+        "key_findings": [], "results_table": [], "significance": "s",
+        "limitations": [], "future_work": [], "key_terms": [],
+        "confidence_notes": "", "full_text": text,
+    })
+
+
+def _post_pdf(client):
+    return client.post("/summarize", files={"file": ("p.pdf", b"%PDF", "application/pdf")})
+
+
+def test_ip_limit_is_off_by_default(client, ok_paper, monkeypatch):
+    """Unconfigured, the address counter must not constrain anyone — NAT'd
+    networks would otherwise share one allowance."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 0)
+    for _ in range(9):
+        client.cookies.clear()  # a fresh session each time, same address
+        assert _post_pdf(client).status_code == 200
+
+
+def test_ip_limit_bounds_a_cookie_cycling_client(client, ok_paper, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 3)
+    codes = []
+    for _ in range(5):
+        client.cookies.clear()
+        codes.append(_post_pdf(client).status_code)
+    assert codes == [200, 200, 200, 429, 429]
+
+
+def test_ip_credit_is_refunded_on_failure(client, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "error", "title": "", "abstract": "", "full_text": "", "error": "nope",
+    })
+    for _ in range(6):
+        client.cookies.clear()
+        assert _post_pdf(client).status_code == 422  # never 429
+
+
+def test_session_limit_refunds_the_ip_credit(client, ok_paper, monkeypatch):
+    """A 429 from the session limit must not also burn an address credit."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 100)
+    monkeypatch.setattr(user_session, "DAILY_LIMIT", 2)
+    assert _post_pdf(client).status_code == 200
+    assert _post_pdf(client).status_code == 200
+    assert _post_pdf(client).status_code == 429
+
+    import sqlite3
+    conn = sqlite3.connect(user_session.DB_PATH)
+    ip_count = conn.execute("SELECT count FROM ip_usage").fetchone()[0]
+    conn.close()
+    assert ip_count == 2  # the rejected request gave its address credit back
+
+
+def test_proxy_headers_ignored_unless_trusted(client, ok_paper, monkeypatch):
+    """Forged X-Forwarded-For must not mint a new identity by default."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(user_session, "TRUST_PROXY_HEADERS", False)
+    codes = []
+    for i in range(4):
+        client.cookies.clear()
+        codes.append(client.post(
+            "/summarize",
+            files={"file": ("p.pdf", b"%PDF", "application/pdf")},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code)
+    assert codes == [200, 200, 429, 429]
+
+
+def test_proxy_headers_honoured_when_trusted(client, ok_paper, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(user_session, "TRUST_PROXY_HEADERS", True)
+    codes = []
+    for i in range(4):
+        client.cookies.clear()
+        codes.append(client.post(
+            "/summarize",
+            files={"file": ("p.pdf", b"%PDF", "application/pdf")},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code)
+    assert codes == [200, 200, 200, 200]  # distinct addresses, each under limit
