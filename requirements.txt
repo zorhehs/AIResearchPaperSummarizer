@@ -3,7 +3,6 @@ groq==1.0.0
 httpx==0.28.1
 pydantic==2.13.4
 PyMuPDF==1.26.5
-pytest==8.4.2
 python-dotenv==1.2.1
 python-multipart==0.0.20
 requests==2.32.5
