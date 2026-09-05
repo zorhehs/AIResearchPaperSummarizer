@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import requests
@@ -6,16 +7,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from extract import extract_page_texts, PDFExtractionError, extract_pdf_metadata
+from extract import (
+    extract_page_texts,
+    ocr_page_texts,
+    ocr_available,
+    PDFExtractionError,
+    extract_pdf_metadata,
+)
 from clean import clean_text
 from metadata import extract_metadata
 from fetch_doi import get_pdf_url_from_doi
+import cache
+
+_MISS = object()
+
+# Module logger rather than print(): under uvicorn these lines are otherwise
+# unattributed stdout, with no level to filter on and no timestamp.
+log = logging.getLogger(__name__)
 
 # Unpaywall wants a contact address identifying whoever is calling it. There
 # is deliberately no default: an unset value skips the Unpaywall lookup and
 # falls through to Crossref, rather than sending every deployment's traffic
 # under one person's address.
 UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "").strip()
+
+# Scanned papers are OCR'd automatically when Tesseract is available. Set
+# ENABLE_OCR=0 to keep the old behaviour (an honest error instead of a slow
+# fallback) on deployments where the extra seconds per page are not welcome.
+ENABLE_OCR = (os.getenv("ENABLE_OCR", "1") or "1").strip().lower() not in {"0", "false", "no"}
+
+# Below this many characters a PDF is treated as having no usable text layer.
+MIN_USABLE_TEXT = 50
 
 
 def _parse_crossref_item(data: dict) -> dict:
@@ -38,15 +60,27 @@ def _parse_crossref_item(data: dict) -> dict:
     return {"title": title, "abstract": abstract, "authors": authors, "year": year, "journal": journal, "cited_by": cited_by}
 
 
+EMPTY_CROSSREF = {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
+
+
 def get_metadata_from_doi_crossref(doi):
+    # A published paper's authors, year and journal do not change; only the
+    # citation count drifts, and not on a timescale worth a request per summary.
+    cached = cache.get("crossref_doi", doi, _MISS)
+    if cached is not _MISS:
+        return cached
+
     encoded_doi = requests.utils.quote(doi, safe="")
     url = "https://api.crossref.org/works/" + encoded_doi
     response = requests.get(url, timeout=20, headers={"User-Agent": "AI-Research-Summarizer/1.0"})
     if response.status_code != 200:
-        return {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
+        # Not cached: a 404 here may just be Crossref having a bad minute.
+        return dict(EMPTY_CROSSREF)
 
     data = response.json().get("message", {})
-    return _parse_crossref_item(data)
+    meta = _parse_crossref_item(data)
+    cache.put("crossref_doi", doi, meta)
+    return meta
 
 
 def _title_similarity(a: str, b: str) -> float:
@@ -68,6 +102,11 @@ def get_metadata_from_crossref_search(title: str, rows: int = 3):
     """
     if not title:
         return None
+
+    cached = cache.get("crossref_title", title, _MISS)
+    if cached is not _MISS:
+        return cached
+
     try:
         response = requests.get(
             "https://api.crossref.org/works",
@@ -92,10 +131,14 @@ def get_metadata_from_crossref_search(title: str, rows: int = 3):
         if score > best_score:
             best, best_score = item, score
     if best is None or best_score < 0.6:
+        # Cache the miss too: a title that matches nothing today will still
+        # match nothing tomorrow, and this runs on every PDF upload.
+        cache.put("crossref_title", title, None)
         return None
 
     meta = _parse_crossref_item(best)
     meta.pop("abstract", None)  # the PDF has the real abstract
+    cache.put("crossref_title", title, meta)
     return meta
 
 
@@ -187,20 +230,36 @@ def process_input(pdf_path=None, doi=None, email=None):
             }
 
         cleaned, page_spans = _build_page_text(page_texts)
-        if len(cleaned.strip()) < 50:
+        source = "pdf"
+
+        # No text layer — almost always a scan. Try OCR before giving up.
+        if len(cleaned.strip()) < MIN_USABLE_TEXT and ENABLE_OCR and ocr_available():
+            try:
+                ocr_texts = ocr_page_texts(pdf_path)
+                ocr_cleaned, ocr_spans = _build_page_text(ocr_texts)
+                if len(ocr_cleaned.strip()) >= MIN_USABLE_TEXT:
+                    cleaned, page_spans, source = ocr_cleaned, ocr_spans, "pdf_ocr"
+            except Exception as e:
+                log.warning("OCR failed for %s: %s", pdf_path, e)
+
+        if len(cleaned.strip()) < MIN_USABLE_TEXT:
+            if not ENABLE_OCR:
+                why = "OCR is disabled on this server (ENABLE_OCR=0)."
+            elif not ocr_available():
+                why = ("This looks like a scanned PDF, and OCR is unavailable here "
+                       "(Tesseract is not installed or its language data is missing).")
+            else:
+                why = "This looks like a scanned PDF, but OCR could not read any text from it."
             return {
                 "source": "error",
                 "title": "",
                 "abstract": "",
                 "full_text": "",
-                "error": (
-                    f"'{pdf_path}' appears to have no extractable text. "
-                    f"This may be a scanned PDF that needs OCR, which isn't supported yet."
-                ),
+                "error": f"'{os.path.basename(pdf_path)}' has no extractable text. {why}",
             }
 
         meta = _finalize_pdf_meta(extract_metadata(cleaned), pdf_path)
-        meta.update({"source": "pdf", "full_text": cleaned, "page_spans": page_spans})
+        meta.update({"source": source, "full_text": cleaned, "page_spans": page_spans})
         return meta
 
     elif doi:
@@ -214,14 +273,14 @@ def process_input(pdf_path=None, doi=None, email=None):
 
         contact_email = email or UNPAYWALL_EMAIL
         if not contact_email:
-            print("UNPAYWALL_EMAIL is not set — skipping Unpaywall, using Crossref only.")
+            log.info("UNPAYWALL_EMAIL is not set — skipping Unpaywall, using Crossref only.")
             pdf_url = None
         else:
             try:
                 pdf_url = get_pdf_url_from_doi(doi, contact_email)
             except Exception as e:
                 # Unpaywall unreachable → still try Crossref below instead of failing
-                print("Unpaywall lookup failed:", e)
+                log.warning("Unpaywall lookup failed for %s: %s", doi, e)
                 pdf_url = None
 
         if pdf_url:
@@ -234,12 +293,12 @@ def process_input(pdf_path=None, doi=None, email=None):
                 meta.update({"source": "doi_pdf", "full_text": cleaned, "page_spans": page_spans})
                 return meta
             except Exception as e:
-                print("PDF download/parsing failed:", e)
+                log.warning("PDF download/parsing failed for %s: %s", pdf_url, e)
 
         try:
             meta = get_metadata_from_doi_crossref(doi)
         except Exception as e:
-            print("Crossref lookup failed:", e)
+            log.warning("Crossref lookup failed for %s: %s", doi, e)
             meta = {"title": "", "abstract": "", "authors": [], "year": "", "journal": "", "cited_by": None}
         abstract = (meta.get("abstract") or "").strip()
         if abstract:

@@ -11,13 +11,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The OCR tests skip themselves without Tesseract; install it so they
+      # actually run in CI rather than silently passing.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      # Needed by the frontend tests and by the DOI parity check, which runs the
+      # same corpus through both implementations.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: pip install -r requirements-dev.txt
 
       # The suite is fully offline: the DB is a temp file per test and no model
       # API is called, so no secrets are needed here.
       - run: python -m pytest tests/ -v
+
+      # No npm install: the frontend tests evaluate the page's inline script in
+      # a sandbox using only node's built-in test runner.
+      - run: node --test "tests/frontend/*.test.mjs"
