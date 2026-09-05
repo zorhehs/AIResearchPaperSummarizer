@@ -112,3 +112,221 @@ def test_daily_usage_limit(tmp_path, monkeypatch):
     with pytest.raises(user_session.HTTPException) as exc:
         user_session.check_and_increment_usage(sid)
     assert exc.value.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# Upload path safety
+# ---------------------------------------------------------------------------
+
+def test_upload_filename_cannot_escape_upload_dir(client, monkeypatch):
+    """A traversal filename must not steer the write outside UPLOAD_DIR.
+
+    The endpoint deletes whatever path it wrote to, so an escape would also be
+    an arbitrary-delete primitive.
+    """
+    seen = {}
+
+    def fake_process_input(pdf_path=None, doi=None, email=None):
+        seen["path"] = pdf_path
+        return {"source": "error", "title": "", "abstract": "", "full_text": "",
+                "error": "stop here"}
+
+    monkeypatch.setattr(api, "process_input", fake_process_input)
+
+    res = client.post(
+        "/summarize",
+        files={"file": ("../../../../tmp/evil.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+    assert res.status_code == 422
+
+    written = os.path.realpath(seen["path"])
+    upload_dir = os.path.realpath(api.UPLOAD_DIR)
+    assert os.path.dirname(written) == upload_dir
+    assert "evil" not in os.path.basename(written)
+
+
+def test_upload_keeps_only_a_sane_extension(client, monkeypatch):
+    """Odd extensions collapse to .pdf; a normal one is preserved."""
+    seen = []
+
+    def fake_process_input(pdf_path=None, doi=None, email=None):
+        seen.append(os.path.splitext(pdf_path)[1])
+        return {"source": "error", "title": "", "abstract": "", "full_text": "",
+                "error": "stop"}
+
+    monkeypatch.setattr(api, "process_input", fake_process_input)
+
+    for name in ("paper.pdf", "paper.PDF", "archive.tar.gz", "noextension", "weird.thisisnotanext"):
+        assert client.post(
+            "/summarize", files={"file": (name, b"%PDF", "application/pdf")}
+        ).status_code == 422
+
+    assert seen == [".pdf", ".PDF", ".gz", ".pdf", ".pdf"]
+
+
+# ---------------------------------------------------------------------------
+# Daily-limit accounting
+# ---------------------------------------------------------------------------
+
+def test_failed_summary_does_not_consume_a_credit(client, monkeypatch):
+    """A request that never yields a summary must give the credit back."""
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "error", "title": "", "abstract": "", "full_text": "",
+        "error": "Scanned PDF with no extractable text.",
+    })
+
+    for _ in range(3):
+        res = client.post(
+            "/summarize",
+            files={"file": ("paper.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert res.status_code == 422
+
+    assert client.get("/usage-status").json()["used"] == 0
+
+
+def test_successful_summary_does_consume_a_credit(client, monkeypatch):
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "pdf", "title": "T", "abstract": "", "authors": [], "year": "",
+        "journal": "", "cited_by": None, "full_text": "word " * 100,
+    })
+    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="", source="": {
+        "title": "T", "authors": [], "one_line_summary": "x", "field_tags": [],
+        "overview": "o", "problem_statement": "p", "approach": "a",
+        "key_findings": [], "results_table": [], "significance": "s",
+        "limitations": [], "future_work": [], "key_terms": [],
+        "confidence_notes": "", "full_text": text,
+    })
+    res = client.post("/summarize", files={"file": ("p.pdf", b"%PDF", "application/pdf")})
+    assert res.status_code == 200
+    assert client.get("/usage-status").json()["used"] == 1
+
+
+def test_refund_never_goes_negative(tmp_path, monkeypatch):
+    monkeypatch.setattr(user_session, "DB_PATH", str(tmp_path / "refund.db"))
+    user_session.init_db(str(tmp_path / "refund.db"))
+    session_id = str(uuid.uuid4())
+    user_session.refund_usage(session_id)          # nothing recorded yet
+    user_session.check_and_increment_usage(session_id)
+    user_session.refund_usage(session_id)
+    user_session.refund_usage(session_id)          # already back to zero
+    conn = __import__("sqlite3").connect(str(tmp_path / "refund.db"))
+    row = conn.execute("SELECT count FROM usage WHERE session_id = ?", (session_id,)).fetchone()
+    conn.close()
+    assert row is None or row[0] == 0
+
+
+def test_session_cookie_is_set_on_error_responses(client, monkeypatch):
+    """Without this the daily limit never binds: a caller whose requests keep
+    failing is handed a fresh session id every time."""
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "error", "title": "", "abstract": "", "full_text": "", "error": "nope",
+    })
+    res = client.post("/summarize", files={"file": ("p.pdf", b"%PDF", "application/pdf")})
+    assert res.status_code == 422
+    assert res.cookies.get("session_id")
+
+
+def test_session_id_is_stable_across_requests(client):
+    first = client.get("/health")
+    session_id = first.cookies.get("session_id")
+    assert session_id
+    # the client now carries the cookie; the server must not re-issue a new one
+    second = client.get("/health")
+    assert second.cookies.get("session_id") is None
+    assert client.cookies.get("session_id") == session_id
+
+
+# ---------------------------------------------------------------------------
+# Per-address backstop (opt-in via IP_DAILY_LIMIT)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def ok_paper(monkeypatch):
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "pdf", "title": "T", "abstract": "", "authors": [], "year": "",
+        "journal": "", "cited_by": None, "full_text": "word " * 100,
+    })
+    monkeypatch.setattr(api, "summarize_paper", lambda text, session_id=None, title="", abstract="", source="": {
+        "title": "T", "authors": [], "one_line_summary": "x", "field_tags": [],
+        "overview": "o", "problem_statement": "p", "approach": "a",
+        "key_findings": [], "results_table": [], "significance": "s",
+        "limitations": [], "future_work": [], "key_terms": [],
+        "confidence_notes": "", "full_text": text,
+    })
+
+
+def _post_pdf(client):
+    return client.post("/summarize", files={"file": ("p.pdf", b"%PDF", "application/pdf")})
+
+
+def test_ip_limit_is_off_by_default(client, ok_paper, monkeypatch):
+    """Unconfigured, the address counter must not constrain anyone — NAT'd
+    networks would otherwise share one allowance."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 0)
+    for _ in range(9):
+        client.cookies.clear()  # a fresh session each time, same address
+        assert _post_pdf(client).status_code == 200
+
+
+def test_ip_limit_bounds_a_cookie_cycling_client(client, ok_paper, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 3)
+    codes = []
+    for _ in range(5):
+        client.cookies.clear()
+        codes.append(_post_pdf(client).status_code)
+    assert codes == [200, 200, 200, 429, 429]
+
+
+def test_ip_credit_is_refunded_on_failure(client, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+        "source": "error", "title": "", "abstract": "", "full_text": "", "error": "nope",
+    })
+    for _ in range(6):
+        client.cookies.clear()
+        assert _post_pdf(client).status_code == 422  # never 429
+
+
+def test_session_limit_refunds_the_ip_credit(client, ok_paper, monkeypatch):
+    """A 429 from the session limit must not also burn an address credit."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 100)
+    monkeypatch.setattr(user_session, "DAILY_LIMIT", 2)
+    assert _post_pdf(client).status_code == 200
+    assert _post_pdf(client).status_code == 200
+    assert _post_pdf(client).status_code == 429
+
+    import sqlite3
+    conn = sqlite3.connect(user_session.DB_PATH)
+    ip_count = conn.execute("SELECT count FROM ip_usage").fetchone()[0]
+    conn.close()
+    assert ip_count == 2  # the rejected request gave its address credit back
+
+
+def test_proxy_headers_ignored_unless_trusted(client, ok_paper, monkeypatch):
+    """Forged X-Forwarded-For must not mint a new identity by default."""
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(user_session, "TRUST_PROXY_HEADERS", False)
+    codes = []
+    for i in range(4):
+        client.cookies.clear()
+        codes.append(client.post(
+            "/summarize",
+            files={"file": ("p.pdf", b"%PDF", "application/pdf")},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code)
+    assert codes == [200, 200, 429, 429]
+
+
+def test_proxy_headers_honoured_when_trusted(client, ok_paper, monkeypatch):
+    monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
+    monkeypatch.setattr(user_session, "TRUST_PROXY_HEADERS", True)
+    codes = []
+    for i in range(4):
+        client.cookies.clear()
+        codes.append(client.post(
+            "/summarize",
+            files={"file": ("p.pdf", b"%PDF", "application/pdf")},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code)
+    assert codes == [200, 200, 200, 200]  # distinct addresses, each under limit

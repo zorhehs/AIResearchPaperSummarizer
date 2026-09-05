@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -13,6 +14,8 @@ from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
+log = logging.getLogger(__name__)
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
 LOCAL_MODEL = "llama3.2:1b"
 
@@ -24,10 +27,13 @@ GROQ_THIRD_MODEL = "qwen/qwen3-32b"  # real Groq model id (qwen3.8-27b does not 
 # after one model's 429s, we rotate through the list below.
 GROQ_MODELS = [GROQ_MODEL, GROQ_FALLBACK_MODEL, GROQ_THIRD_MODEL]
 
-# gpt-oss-120b handles far more than this; beyond it we map-reduce instead
-SINGLE_PASS_CHAR_LIMIT = 60000
-
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "users.db")
+# Both the summary cache and the session/usage tables live in this SQLite file.
+# DB_PATH is env-overridable so a container can point it at a mounted volume;
+# without that the database would sit inside the image layer and be discarded
+# every time the container is recreated.
+DB_PATH = os.getenv("DB_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "users.db"
+)
 
 
 # Bump when summary shape/prompting changes so stale cached entries
@@ -78,6 +84,7 @@ def _reserve_budget(tokens: int):
 
 def _cache_get(text: str):
     try:
+        os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS summary_cache (
@@ -98,6 +105,7 @@ def _cache_get(text: str):
 
 def _cache_put(text: str, result: dict):
     try:
+        os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS summary_cache (
@@ -200,7 +208,8 @@ def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_token
                         break
                     if attempt == max_retries:
                         break
-                    print(f"  (rate limited, waiting {wait:.1f}s... {candidate} attempt {attempt}/{max_retries})")
+                    log.info("Rate limited on %s; waiting %.1fs (attempt %d/%d)",
+                             candidate, wait, attempt, max_retries)
                     time.sleep(wait)
                     continue
                 break  # other API error → try next model

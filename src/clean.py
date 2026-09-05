@@ -13,12 +13,27 @@ def remove_repeated_lines(text: str) -> str:
     cleaned = [line for line in lines if line_counts[line] < threshold or line.strip() == ""]
     return "\n".join(cleaned)
 
+_REFERENCES_HEADING = re.compile(
+    r"^[ \t]*(?:\d+\.?[ \t]*)?(references|bibliography|works cited)[ \t]*:?[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def remove_references(text: str) -> str:
-    markers = ["References", "REFERENCES", "Bibliography"]
-    for marker in markers:
-        idx = text.rfind(marker)
-        if idx != -1:
-            return text[:idx]
+    """Drop the reference list from the end of a paper.
+
+    Only a line that is *nothing but* a references heading counts, so an
+    in-body mention ("see the references in Section 4") no longer truncates
+    the paper there. The heading is searched for in the back half of the text,
+    because a bibliography never opens a paper but the phrase may well appear
+    in an abstract or introduction.
+    """
+    if not text:
+        return text
+    halfway = len(text) // 2
+    matches = [m for m in _REFERENCES_HEADING.finditer(text) if m.start() >= halfway]
+    if matches:
+        return text[: matches[-1].start()]
     return text
 
 def remove_arxiv_watermark(text: str) -> str:

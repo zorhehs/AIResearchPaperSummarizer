@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import logging
 import re
 import uuid
 
@@ -13,16 +14,29 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from pipeline import process_input
 from summarize import summarize_paper, stream_summarize_paper, answer_question
-from user_session import get_or_create_session_id, check_and_increment_usage, init_db, router as user_router
+from user_session import (
+    check_and_increment_usage,
+    check_and_increment_ip_usage,
+    refund_usage,
+    refund_ip_usage,
+    client_ip,
+    init_db,
+    router as user_router,
+)
 
 SESSION_COOKIE = "session_id"
 
 
 def _read_or_create_session(request: Request) -> str:
     """Return the caller's session id, minting a new one if the request has no
-    cookie yet. The caller is responsible for setting SESSION_COOKIE on the
-    response it actually returns (FastAPI does not merge cookies from the
-    injected `response` parameter into a returned Response object)."""
+    cookie yet.
+
+    The session middleware resolves this once per request and stashes it on
+    request.state, so every handler in a request sees the same id.
+    """
+    existing = getattr(request.state, "session_id", None)
+    if existing:
+        return existing
     return request.cookies.get(SESSION_COOKIE) or str(uuid.uuid4())
 
 
@@ -34,17 +48,67 @@ def _set_session_cookie(resp: Response, session_id: str):
         httponly=True,
     )
 
+# uvicorn configures its own loggers but not the root one, so without this
+# the application modules' log lines would be dropped entirely.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+)
+
 app = FastAPI(title="AI Research Paper Summarizer")
 
 from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Sessions ride on a cookie, so credentialed cross-origin requests must stay
+# off: a wildcard origin combined with allow_credentials=True would let any
+# site drive a visitor's session. Same-origin requests from the bundled UI
+# send the cookie regardless of this policy.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def session_middleware(request: Request, call_next):
+    """Resolve the caller's session id once and set the cookie on every response.
+
+    Previously the cookie was only attached to successful /summarize responses,
+    so a client whose requests kept failing (or one that never loaded the UI)
+    was handed a brand-new identity each time and the daily limit never bound.
+    Setting it here covers error responses and the SSE stream alike.
+    """
+    session_id = request.cookies.get(SESSION_COOKIE) or str(uuid.uuid4())
+    request.state.session_id = session_id
+    response = await call_next(request)
+    if SESSION_COOKIE not in request.cookies:
+        _set_session_cookie(response, session_id)
+    return response
+
 
 app.include_router(user_router)
 
 init_db()
 
-UPLOAD_DIR = "temp_uploads"
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _save_upload(file: UploadFile) -> str:
+    """Persist an uploaded file under a generated name and return its path.
+
+    The client-supplied filename is never used to build the path: a name like
+    "../../etc/passwd" would otherwise escape UPLOAD_DIR, and the caller's
+    cleanup would then delete whatever it landed on. Only the extension is
+    carried over, and only when it is a plain alphanumeric suffix."""
+    ext = os.path.splitext(file.filename or "")[1]
+    if not re.fullmatch(r"\.[A-Za-z0-9]{1,8}", ext or ""):
+        ext = ".pdf"
+    saved_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}{ext}")
+    with open(saved_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return saved_path
 
 
 def _normalize_ws(s: str) -> str:
@@ -87,18 +151,22 @@ async def summarize(
         raise HTTPException(status_code=400, detail="Provide either a PDF file or a DOI.")
 
     session_id = _read_or_create_session(request)
+    ip = client_ip(request)
 
+    # The address backstop is checked first so a client that cycles cookies to
+    # dodge the session limit still runs into it (no-op unless configured).
+    check_and_increment_ip_usage(ip)
     try:
         check_and_increment_usage(session_id)
     except HTTPException:
+        refund_ip_usage(ip)
         raise
 
     saved_path = None
+    delivered = False
     try:
         if file:
-            saved_path = os.path.join(UPLOAD_DIR, file.filename)
-            with open(saved_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
+            saved_path = _save_upload(file)
             result = process_input(pdf_path=saved_path)
         else:
             result = process_input(doi=doi)
@@ -144,11 +212,15 @@ async def summarize(
         payload["page_spans"] = page_spans
         payload["page_count"] = len(page_spans)
         _ground_citations(payload, result["full_text"], page_spans)
-        resp = JSONResponse(payload)
-        _set_session_cookie(resp, session_id)
-        return resp
+        delivered = True
+        return JSONResponse(payload)
 
     finally:
+        # The credit was reserved before any work began; hand it back unless the
+        # caller actually got a summary out of it.
+        if not delivered:
+            refund_usage(session_id)
+            refund_ip_usage(ip)
         if saved_path and os.path.exists(saved_path):
             os.remove(saved_path)
 
@@ -166,18 +238,22 @@ async def summarize_stream(
         raise HTTPException(status_code=400, detail="Provide either a PDF file or a DOI.")
 
     session_id = _read_or_create_session(request)
+    ip = client_ip(request)
 
+    # The address backstop is checked first so a client that cycles cookies to
+    # dodge the session limit still runs into it (no-op unless configured).
+    check_and_increment_ip_usage(ip)
     try:
         check_and_increment_usage(session_id)
     except HTTPException:
+        refund_ip_usage(ip)
         raise
 
     saved_path = None
+    streaming = False
     try:
         if file:
-            saved_path = os.path.join(UPLOAD_DIR, file.filename)
-            with open(saved_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
+            saved_path = _save_upload(file)
             result = process_input(pdf_path=saved_path)
         else:
             result = process_input(doi=doi)
@@ -221,14 +297,23 @@ async def summarize_stream(
                         merged["page_count"] = len(page_spans)
                         _ground_citations(merged, result["full_text"], page_spans)
                         event = {**event, "result": merged}
+                    if event.get("type") == "error":
+                        refund_usage(session_id)
+                        refund_ip_usage(ip)
                     yield f"data: {json.dumps(event)}\n\n"
             except Exception as e:
+                refund_usage(session_id)
+                refund_ip_usage(ip)
                 yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
 
-        sse = StreamingResponse(event_source(), media_type="text/event-stream")
-        _set_session_cookie(sse, session_id)
-        return sse
+        streaming = True
+        return StreamingResponse(event_source(), media_type="text/event-stream")
     finally:
+        # Refund setup failures here; failures raised once the stream is already
+        # running are refunded inside event_source() instead.
+        if not streaming:
+            refund_usage(session_id)
+            refund_ip_usage(ip)
         if saved_path and os.path.exists(saved_path):
             os.remove(saved_path)
 
@@ -267,11 +352,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "..", "static")
 
 @app.get("/")
-def serve_ui(request: Request):
-    # Every visitor gets a stable session cookie at page load, so the usage
-    # counter and daily limit track the same session_id across requests.
-    resp = FileResponse(os.path.join(STATIC_DIR, "index.html"))
-    _set_session_cookie(resp, _read_or_create_session(request))
-    return resp
+def serve_ui():
+    # The session cookie is attached by session_middleware, so the usage counter
+    # and daily limit track the same session_id from the first page load on.
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
