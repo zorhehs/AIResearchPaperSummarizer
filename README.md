@@ -1,5 +1,7 @@
 # AI Research Paper Summarizer
 
+[![tests](https://github.com/zorhehs/AIResearchPaperSummarizer/actions/workflows/tests.yml/badge.svg)](https://github.com/zorhehs/AIResearchPaperSummarizer/actions/workflows/tests.yml)
+
 Upload a research paper (a PDF file, or just a DOI) and get a structured summary back: what the paper is about, the problem it tackles, the approach, the key findings with page-grounded quotes, the headline numbers, the limitations, and the future work. The same page also draws an interactive knowledge graph of the paper and lets you ask follow-up questions in chat.
 
 The backend is FastAPI; the frontend is a single-file vanilla-JS page. No build step, no npm, no separate client to deploy.
