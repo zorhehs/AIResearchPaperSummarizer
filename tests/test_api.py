@@ -38,7 +38,7 @@ def test_summarize_requires_input(client):
 
 
 def test_summarize_success(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "pdf", "title": "Test Paper", "abstract": "An abstract.",
         "authors": ["Jane Doe"], "year": "2025", "journal": "J of Tests", "cited_by": 3,
         "full_text": "word " * 100,
@@ -62,7 +62,7 @@ def test_summarize_success(client, monkeypatch):
 
 
 def test_summarize_pipeline_error(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "error", "title": "", "abstract": "", "full_text": "", "error": "bad pdf",
     })
     res = client.post("/summarize", files={"file": ("paper.pdf", b"junk", "application/pdf")})
@@ -126,7 +126,7 @@ def test_upload_filename_cannot_escape_upload_dir(client, monkeypatch):
     """
     seen = {}
 
-    def fake_process_input(pdf_path=None, doi=None, email=None):
+    def fake_process_input(pdf_path=None, doi=None, email=None, **kw):
         seen["path"] = pdf_path
         return {"source": "error", "title": "", "abstract": "", "full_text": "",
                 "error": "stop here"}
@@ -149,7 +149,7 @@ def test_upload_keeps_only_a_sane_extension(client, monkeypatch):
     """Odd extensions collapse to .pdf; a normal one is preserved."""
     seen = []
 
-    def fake_process_input(pdf_path=None, doi=None, email=None):
+    def fake_process_input(pdf_path=None, doi=None, email=None, **kw):
         seen.append(os.path.splitext(pdf_path)[1])
         return {"source": "error", "title": "", "abstract": "", "full_text": "",
                 "error": "stop"}
@@ -170,7 +170,7 @@ def test_upload_keeps_only_a_sane_extension(client, monkeypatch):
 
 def test_failed_summary_does_not_consume_a_credit(client, monkeypatch):
     """A request that never yields a summary must give the credit back."""
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "error", "title": "", "abstract": "", "full_text": "",
         "error": "Scanned PDF with no extractable text.",
     })
@@ -186,7 +186,7 @@ def test_failed_summary_does_not_consume_a_credit(client, monkeypatch):
 
 
 def test_successful_summary_does_consume_a_credit(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "pdf", "title": "T", "abstract": "", "authors": [], "year": "",
         "journal": "", "cited_by": None, "full_text": "word " * 100,
     })
@@ -219,7 +219,7 @@ def test_refund_never_goes_negative(tmp_path, monkeypatch):
 def test_session_cookie_is_set_on_error_responses(client, monkeypatch):
     """Without this the daily limit never binds: a caller whose requests keep
     failing is handed a fresh session id every time."""
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "error", "title": "", "abstract": "", "full_text": "", "error": "nope",
     })
     res = client.post("/summarize", files={"file": ("p.pdf", b"%PDF", "application/pdf")})
@@ -243,7 +243,7 @@ def test_session_id_is_stable_across_requests(client):
 
 @pytest.fixture()
 def ok_paper(monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "pdf", "title": "T", "abstract": "", "authors": [], "year": "",
         "journal": "", "cited_by": None, "full_text": "word " * 100,
     })
@@ -280,7 +280,7 @@ def test_ip_limit_bounds_a_cookie_cycling_client(client, ok_paper, monkeypatch):
 
 def test_ip_credit_is_refunded_on_failure(client, monkeypatch):
     monkeypatch.setattr(user_session, "IP_DAILY_LIMIT", 2)
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "error", "title": "", "abstract": "", "full_text": "", "error": "nope",
     })
     for _ in range(6):

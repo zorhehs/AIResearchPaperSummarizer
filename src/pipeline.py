@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, Future
 import requests
 from difflib import SequenceMatcher
 from dotenv import load_dotenv
@@ -142,12 +143,15 @@ def get_metadata_from_crossref_search(title: str, rows: int = 3):
     return meta
 
 
-def _enrich_from_crossref(meta: dict) -> dict:
-    """Fill missing authors/year/journal/citations via a Crossref title search."""
-    try:
-        found = get_metadata_from_crossref_search(meta.get("title", ""))
-    except Exception:
-        found = None
+# Crossref title lookups take 2-6 seconds cold and used to run inline, before
+# the model call could even start. They only fill in authors/year/journal, so
+# they can run alongside the summary and be merged in at the end.
+_lookup_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="crossref")
+ENRICHMENT_KEY = "_enrichment"
+ENRICHMENT_TIMEOUT = 8.0  # seconds to wait for a still-running lookup at merge time
+
+
+def _merge_found(meta: dict, found) -> dict:
     if not found:
         return meta
     for key in ("authors", "year", "journal", "cited_by"):
@@ -156,7 +160,41 @@ def _enrich_from_crossref(meta: dict) -> dict:
     return meta
 
 
-def _finalize_pdf_meta(meta: dict, pdf_path: str) -> dict:
+def _enrich_from_crossref(meta: dict) -> dict:
+    """Fill missing authors/year/journal/citations via a Crossref title search."""
+    try:
+        found = get_metadata_from_crossref_search(meta.get("title", ""))
+    except Exception:
+        found = None
+    return _merge_found(meta, found)
+
+
+def _start_enrichment(meta: dict) -> dict:
+    """Kick the Crossref lookup off in the background and return immediately."""
+    meta[ENRICHMENT_KEY] = _lookup_pool.submit(
+        get_metadata_from_crossref_search, meta.get("title", ""))
+    return meta
+
+
+def apply_enrichment(meta: dict, timeout: float = ENRICHMENT_TIMEOUT) -> dict:
+    """Merge a deferred Crossref lookup into `meta`, if one was started.
+
+    Safe to call on any result: a metadata dict with no pending lookup is
+    returned unchanged. A lookup that is still running after `timeout` is
+    abandoned — the summary is worth more than the journal name.
+    """
+    fut = meta.pop(ENRICHMENT_KEY, None)
+    if not isinstance(fut, Future):
+        return meta
+    try:
+        found = fut.result(timeout=timeout)
+    except Exception as e:
+        log.info("Crossref enrichment skipped: %s", e)
+        found = None
+    return _merge_found(meta, found)
+
+
+def _finalize_pdf_meta(meta: dict, pdf_path: str, defer_enrichment: bool = False) -> dict:
     """Complete PDF-derived metadata with embedded info and Crossref lookup."""
     embedded = extract_pdf_metadata(pdf_path)
 
@@ -177,7 +215,7 @@ def _finalize_pdf_meta(meta: dict, pdf_path: str) -> dict:
     meta["cited_by"] = meta.get("cited_by")
 
     if meta.get("title"):
-        meta = _enrich_from_crossref(meta)
+        meta = _start_enrichment(meta) if defer_enrichment else _enrich_from_crossref(meta)
     return meta
 
 
@@ -216,7 +254,14 @@ def normalize_doi(raw: str) -> str:
     return s.rstrip(".,;")
 
 
-def process_input(pdf_path=None, doi=None, email=None):
+def process_input(pdf_path=None, doi=None, email=None, defer_enrichment=False):
+    """Turn a PDF or DOI into cleaned text plus metadata.
+
+    With defer_enrichment=True the Crossref title lookup for an uploaded PDF is
+    started in the background instead of awaited here; the caller merges it
+    later with apply_enrichment(). The DOI path always resolves Crossref inline,
+    because there it may be the only source of text.
+    """
     if pdf_path:
         try:
             page_texts = extract_page_texts(pdf_path)
@@ -258,7 +303,7 @@ def process_input(pdf_path=None, doi=None, email=None):
                 "error": f"'{os.path.basename(pdf_path)}' has no extractable text. {why}",
             }
 
-        meta = _finalize_pdf_meta(extract_metadata(cleaned), pdf_path)
+        meta = _finalize_pdf_meta(extract_metadata(cleaned), pdf_path, defer_enrichment=defer_enrichment)
         meta.update({"source": source, "full_text": cleaned, "page_spans": page_spans})
         return meta
 

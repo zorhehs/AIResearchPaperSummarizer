@@ -21,12 +21,14 @@ The backend is FastAPI; the frontend is a single-file vanilla-JS page. No build 
 
 ## How a summary is generated
 
-`src/pipeline.py` turns the input into clean text (plus per-page spans used for grounding). `src/summarize.py` then produces the summary on Groq — `openai/gpt-oss-20b` primary, with rotation to `gpt-oss-120b` and `qwen/qwen3-32b` when a model's free-tier daily quota is exhausted — and a local Ollama model as the last resort.
+`src/pipeline.py` turns the input into clean text (plus per-page spans used for grounding). `src/summarize.py` then produces the summary on Groq — `openai/gpt-oss-20b` primary, with rotation to `gpt-oss-120b` and `qwen/qwen3.8-27b` when a model's window or daily quota is exhausted — and a local Ollama model as the last resort. The Crossref metadata lookup runs in the background alongside the model call rather than ahead of it.
 
 Two design choices exist mostly because of the Groq free tier:
 
-- the whole summary is **one** request, not six parallel section calls, and
-- the input is capped: papers that fit are passed through whole; longer ones are sampled from the head, middle, and tail so the request stays inside the per-minute token budget. The model is told it received a truncated excerpt and can flag that in `confidence_notes`.
+- the whole summary is **one** request, not six parallel section calls. It runs in JSON mode with low reasoning effort, so a malformed response — the thing that used to force a second full-size request — is rare, and
+- the input is capped at 14k characters: papers that fit are passed through whole; longer ones are sampled from the head, middle, and tail. That size leaves room for a request *and* a retry inside one 8k-token minute. The model is told it received a truncated excerpt and can flag that in `confidence_notes`.
+
+Token windows are tracked per model, because that is how Groq meters them: when one model's minute is full the call rotates to the next rather than waiting. On a fresh paper the first streamed event now arrives in ~0.1 s and the summary in ~3–6 s; before these changes the same call took ~50 s whenever a retry collided with the window.
 
 ## Setup
 

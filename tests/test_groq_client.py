@@ -46,9 +46,12 @@ def fake_groq(monkeypatch, script):
     import groq
     monkeypatch.setattr(groq, "Groq", FakeGroq)
     monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
-    # Never actually sleep or block on the token window in tests.
+    # Never actually sleep or block on the token window in tests, and start
+    # every test with empty per-model windows — _budgets is module state.
     monkeypatch.setattr(summarize.time, "sleep", lambda s: None)
-    monkeypatch.setattr(summarize, "_reserve_budget", lambda tokens: None)
+    monkeypatch.setattr(summarize, "_budgets", {})
+    monkeypatch.setattr(summarize, "_try_reserve", lambda model, tokens: True)
+    monkeypatch.setattr(summarize, "_reserve_budget", lambda tokens, model=None: None)
     return calls
 
 
@@ -251,27 +254,43 @@ def test_max_tokens_is_forwarded_only_when_given(monkeypatch):
     assert calls[1]["max_tokens"] == 700
 
 
-def test_budget_is_reserved_before_the_call(monkeypatch):
+def test_budget_is_reserved_against_the_model_that_is_called(monkeypatch):
     reserved = []
     calls = fake_groq(monkeypatch, {summarize.GROQ_MODEL: ["ok"]})
-    monkeypatch.setattr(summarize, "_reserve_budget", lambda t: reserved.append(t))
+    monkeypatch.setattr(summarize, "_try_reserve",
+                        lambda model, t: (reserved.append((model, t)), True)[1])
     summarize._ask_groq([{"role": "user", "content": "x" * 3800}])
     assert len(reserved) == 1
+    assert reserved[0][0] == summarize.GROQ_MODEL
     # ~1000 input tokens at 3.8 chars/token, plus the output estimate
-    assert reserved[0] == pytest.approx(1000 + summarize.OUTPUT_TOKEN_EST, rel=0.05)
+    assert reserved[0][1] == pytest.approx(1000 + summarize.OUTPUT_TOKEN_EST, rel=0.05)
 
 
-def test_reserve_budget_lets_a_request_inside_the_window_straight_through(monkeypatch):
-    monkeypatch.setattr(summarize, "_budget", {"minute": int(summarize.time.time() // 60), "tokens": 0})
-    monkeypatch.setattr(summarize.time, "sleep", lambda s: pytest.fail("should not block"))
-    summarize._reserve_budget(summarize.TPM_LIMIT - 1)
-    assert summarize._budget["tokens"] == summarize.TPM_LIMIT - 1
+def test_try_reserve_lets_a_request_inside_the_window_straight_through(monkeypatch):
+    monkeypatch.setattr(summarize, "_budgets", {})
+    assert summarize._try_reserve("m", summarize.TPM_LIMIT - 1) is True
+    assert summarize._budgets["m"]["tokens"] == summarize.TPM_LIMIT - 1
+
+
+def test_try_reserve_refuses_without_waiting_when_the_window_is_full(monkeypatch):
+    monkeypatch.setattr(summarize, "_budgets", {})
+    monkeypatch.setattr(summarize.time, "sleep", lambda s: pytest.fail("must never sleep"))
+    assert summarize._try_reserve("m", summarize.TPM_LIMIT) is True
+    assert summarize._try_reserve("m", 1) is False
+
+
+def test_windows_are_tracked_per_model(monkeypatch):
+    """Groq meters tokens per model, so filling one window must not touch another."""
+    monkeypatch.setattr(summarize, "_budgets", {})
+    assert summarize._try_reserve("a", summarize.TPM_LIMIT) is True
+    assert summarize._try_reserve("a", 1) is False
+    assert summarize._try_reserve("b", summarize.TPM_LIMIT) is True
 
 
 def test_reserve_budget_blocks_until_the_minute_rolls_over(monkeypatch):
     """The window is what stops parallel calls piling up into a 413."""
     minute = int(summarize.time.time() // 60)
-    monkeypatch.setattr(summarize, "_budget", {"minute": minute, "tokens": summarize.TPM_LIMIT})
+    monkeypatch.setattr(summarize, "_budgets", {"m": {"minute": minute, "tokens": summarize.TPM_LIMIT}})
 
     clock = {"now": minute * 60.0}
     monkeypatch.setattr(summarize.time, "time", lambda: clock["now"])
@@ -282,9 +301,81 @@ def test_reserve_budget_blocks_until_the_minute_rolls_over(monkeypatch):
         clock["now"] += 60  # the next poll lands in a fresh minute
     monkeypatch.setattr(summarize.time, "sleep", advance)
 
-    summarize._reserve_budget(100)
+    summarize._reserve_budget(100, "m")
     assert slept, "a full window must make the caller wait"
-    assert summarize._budget["tokens"] == 100, "counter resets with the new minute"
+    assert summarize._budgets["m"]["tokens"] == 100, "counter resets with the new minute"
+
+
+# ---------------------------------------------------------------------------
+# Rotation on a full window, JSON mode, reasoning effort
+# ---------------------------------------------------------------------------
+
+def test_a_full_window_rotates_to_the_next_model_instead_of_waiting(monkeypatch):
+    """This is the 47-second stall: a retry that could not fit in gpt-oss-20b's
+    window used to sleep until the minute rolled, while gpt-oss-120b sat idle
+    with a full window of its own."""
+    calls = fake_groq(monkeypatch, {summarize.GROQ_FALLBACK_MODEL: ["from 120b"]})
+    monkeypatch.setattr(summarize, "_try_reserve",
+                        lambda model, t: model != summarize.GROQ_MODEL)
+    monkeypatch.setattr(summarize, "_reserve_budget",
+                        lambda *a: pytest.fail("must rotate, not wait"))
+    assert summarize._ask_groq(MSG) == "from 120b"
+    assert [c["model"] for c in calls] == [summarize.GROQ_FALLBACK_MODEL]
+
+
+def test_non_blocking_call_raises_when_no_model_has_room(monkeypatch):
+    calls = fake_groq(monkeypatch, {})
+    monkeypatch.setattr(summarize, "_try_reserve", lambda model, t: False)
+    with pytest.raises(summarize.BudgetUnavailable):
+        summarize._ask_groq(MSG, block=False)
+    assert calls == [], "nothing may be sent when nothing fits"
+
+
+def test_blocking_call_waits_only_after_every_model_with_room_has_failed(monkeypatch):
+    """Waiting is the last resort, not the first: models with room are tried
+    first, and only then does the call wait on a full window."""
+    calls = fake_groq(monkeypatch, {
+        summarize.GROQ_FALLBACK_MODEL: [DAILY_QUOTA],
+        summarize.GROQ_THIRD_MODEL: [DAILY_QUOTA],
+        summarize.GROQ_MODEL: ["after the wait"],
+    })
+    monkeypatch.setattr(summarize, "_try_reserve",
+                        lambda model, t: model != summarize.GROQ_MODEL)
+    waited = []
+    monkeypatch.setattr(summarize, "_reserve_budget",
+                        lambda t, model=None: waited.append(model))
+    assert summarize._ask_groq(MSG) == "after the wait"
+    assert waited == [summarize.GROQ_MODEL]
+    assert [c["model"] for c in calls] == [
+        summarize.GROQ_FALLBACK_MODEL, summarize.GROQ_THIRD_MODEL, summarize.GROQ_MODEL]
+
+
+def test_json_mode_is_requested_when_asked(monkeypatch):
+    calls = fake_groq(monkeypatch, {summarize.GROQ_MODEL: ["{}", "{}"]})
+    summarize._ask_groq(MSG)
+    assert "response_format" not in calls[0]
+    summarize._ask_groq(MSG, json_mode=True)
+    assert calls[1]["response_format"] == {"type": "json_object"}
+
+
+def test_reasoning_effort_goes_only_to_models_that_accept_it(monkeypatch):
+    """The qwen models take different values and reject "low"; sending it
+    would burn the fallback with a 400."""
+    calls = fake_groq(monkeypatch, {
+        summarize.GROQ_MODEL: [DAILY_QUOTA],
+        summarize.GROQ_FALLBACK_MODEL: [DAILY_QUOTA],
+        summarize.GROQ_THIRD_MODEL: ["ok"],
+    })
+    summarize._ask_groq(MSG, reasoning_effort="low")
+    by_model = {c["model"]: c for c in calls}
+    assert by_model[summarize.GROQ_MODEL].get("reasoning_effort") == "low"
+    assert by_model[summarize.GROQ_FALLBACK_MODEL].get("reasoning_effort") == "low"
+    assert "reasoning_effort" not in by_model[summarize.GROQ_THIRD_MODEL]
+
+
+def test_the_third_model_is_one_that_exists():
+    """qwen3-32b was removed from Groq; an earlier fix had the ids backwards."""
+    assert summarize.GROQ_THIRD_MODEL == "qwen/qwen3.8-27b"
 
 
 def test_est_tokens_never_returns_zero():
