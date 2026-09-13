@@ -228,10 +228,23 @@
   .filename { display: none; }
 
   /* ── results area ──────────────────── */
-  .paper-title { font-size: 1.18rem; font-weight: 700; color: #1c1917; margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.3; }
-  .paper-authors { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .86rem; color: #6b7280; margin: -5px 0 10px; letter-spacing: -0.005em; }
+  /* the masthead is fixed chrome, so its height has to stay bounded — a long
+     title or a six-institution byline would otherwise eat a fifth of the
+     viewport on a laptop. the full text is always in the exported report. */
+  .paper-title {
+    font-size: 1.24rem; font-weight: 700; color: #1c1917; margin: 0 0 8px;
+    letter-spacing: -0.025em; line-height: 1.3;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .paper-authors {
+    font-size: .86rem; color: #6b7280; margin: 0 0 10px; letter-spacing: -0.005em; line-height: 1.5;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
   .paper-authors i { font-size: 15px; color: #9ca3af; }
-  .paper-header { position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 0 12px; margin: 0; border-bottom: 1px solid #f0f1f2; }
+  .paper-header { padding: 14px 32px 13px; margin: 0; }
+  /* the tag row is the last thing in the masthead — its list spacing would
+     otherwise leave a dead band above the border */
+  .paper-header .tag-row { margin-bottom: 0; }
   .paper-institutions { color: #9ca3af; font-weight: 400; }
   .pub-badge { color: #6b7280; font-size: 12.5px; font-weight: 500; }
   .tag-accent { color: #374151; }
@@ -271,12 +284,13 @@
 
   /* ── stats ── */
   .stats {
+    display: flex; flex-wrap: wrap; gap: 6px 30px;
     border-top: 1px solid #1c1917;
-    padding: 2px 0 6px; margin: 22px 0 6px;
+    padding: 11px 0 4px; margin: 20px 0 4px;
   }
   .stat-row {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding: 9px 0; font-size: 13px; color: #6b7280;
+    display: flex; align-items: baseline; gap: 7px;
+    font-size: 13px; color: #6b7280;
   }
   .stat-row .val { font-weight: 600; color: #1c1917; display: inline-flex; align-items: center; gap: 8px; }
 
@@ -438,6 +452,8 @@
     font-size: 14px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .focus-crumb .brand { color: #1c1917; font-weight: 600; }
+  body.has-masthead .focus-crumb .crumb-sep,
+  body.has-masthead .focus-crumb #focus-crumb-title { display: none; }
   body.dark .focus-crumb .brand { color: #e7e5e4; }
   .focus-crumb #focus-crumb-title { color: #6b7280; font-weight: 400; }
   #focus-exit {
@@ -456,29 +472,30 @@
   }
   body.dark #output-screen { background: #141210; }
   body.screen #output-screen {
-    display: block;
+    display: flex; flex-direction: column;
     animation: screenIn .35s cubic-bezier(.16,1,.3,1) both;
   }
   @keyframes screenIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  /* the paper header is the page's masthead. it sits OUTSIDE #output-scroll, as a
+     flex sibling, so it is structurally incapable of scrolling — position:sticky
+     inside the scroller only ever approximated this, and drifted whenever the
+     scrollport's padding or the pane's height got in the way. --mast-h is its
+     measured height, published by JS so the sticky side panes know how much of
+     the viewport is left to them. */
+  #output-masthead {
+    flex: 0 0 auto; background: #fff; border-bottom: 1px solid #e9eaeb;
+  }
+  #output-masthead:empty { display: none; }
+  body.dark #output-masthead { background: #141210; border-bottom-color: #241f1b; }
   #output-scroll {
-    --out-pad-top: 26px;
-    height: 100%; overflow-y: auto; padding: var(--out-pad-top) 32px 56px; scrollbar-width: thin;
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; padding: 22px 32px 56px; scrollbar-width: thin;
   }
-  /* the paper header is the page's masthead: pin it flush under the topbar so it
-     never moves, and let the summary scroll underneath it. sticky offsets are
-     measured from the scrollport's content edge, so pull it up by the scroll
-     container's own top padding (and pad the header back out by the same amount,
-     with a matching negative margin so nothing shifts at rest) — otherwise a
-     26px strip of scrolling text shows above it. */
-  body.screen .paper-header {
-    top: calc(-1 * var(--out-pad-top));
-    margin-top: calc(-1 * var(--out-pad-top));
-    padding-top: calc(var(--out-pad-top) + 10px);
-    background: #fafaf9;
-  }
-  body.dark.screen .paper-header { background: #141210; }
   body.screen .reading-room { gap: 26px; }
-  body.screen .page-rail { width: min(38%, 500px); position: sticky; top: 0; }
+  body.screen .page-rail {
+    width: min(38%, 500px); position: sticky; top: 0;
+    max-height: calc(100dvh - 52px - var(--mast-h, 0px) - 78px);
+  }
   @media (max-width: 860px) { body.screen .page-rail { width: 100%; } }
 
   /* ── highlighted passages in the source paper ── */
@@ -522,10 +539,12 @@
 
   body.screen .reading-room.has-pdf {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 26px; align-items: stretch; /* stretch (not start) so the sticky paper-header has travel room */
+    gap: 26px; align-items: stretch;
   }
   body.screen .reading-room.has-pdf .pdf-pane {
-    position: sticky; top: 0; max-height: calc(100vh - 76px); max-height: calc(100dvh - 76px);
+    position: sticky; top: 0;
+    max-height: calc(100vh - 52px - var(--mast-h, 0px) - 78px);
+    max-height: calc(100dvh - 52px - var(--mast-h, 0px) - 78px);
   }
   @media (max-width: 1000px) {
     body.screen .reading-room.has-pdf { grid-template-columns: 1fr; }
@@ -695,7 +714,6 @@
   body.dark input[type="text"] { background: #1e1a17; border-color: #3d3830; color: #e7e5e4; }
   body.dark input[type="text"]::placeholder { color: #3d3830; }
   body.dark .paper-title { color: #e7e5e4; }
-  body.dark .paper-header { background: #141210; border-color: #241f1b; }
   body.dark .paper-institutions { color: #6b7280; }
   body.dark .pub-badge { color: #6b7280; }
   body.dark .tag-accent { color: #9ca3af; }
@@ -855,10 +873,11 @@
   }
   .page-text { font-size: 11.5px; line-height: 1.7; color: #4b5563; white-space: pre-wrap; word-break: break-word; }
   .summary-pane { flex: 1; min-width: 0; }
-  /* in focus mode the summary pane must stretch to the full height of the
-     reading room — with align-items:flex-start it collapses to its content
-     height and the sticky .paper-header has no travel room (scrolls away) */
-  body.screen .summary-pane { align-self: stretch; }
+  /* in focus mode the summary pane fills the reading room's height, so the
+     sticky source rail beside it has the full column to travel in. the measure
+     is capped because with no source pane beside it the prose would otherwise
+     run the full window width — 150+ characters a line on a wide display */
+  body.screen .summary-pane { align-self: stretch; max-width: 940px; }
   @media (max-width: 900px) {
     .reading-room { flex-direction: column; }
     .page-rail { position: static; width: 100%; max-height: 420px; order: 2; }
@@ -884,11 +903,11 @@
      ancestor is unreliable in WebKit and makes the buttons scroll away -->
 <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="ti ti-moon" id="theme-icon"></i></button>
 <div id="focus-topbar">
-  <span class="focus-crumb"><span class="brand">Summarizer</span><span> &nbsp;/&nbsp; </span><span id="focus-crumb-title"></span></span>
+  <span class="focus-crumb"><span class="brand">Summarizer</span><span class="crumb-sep"> &nbsp;/&nbsp; </span><span id="focus-crumb-title"></span></span>
   <button id="focus-exit" onclick="exitFocus()" aria-label="Back to home" title="Back to home (Esc)"><i class="ti ti-arrow-left"></i>Back</button>
 </div>
 
-<div id="output-screen"><div id="output-scroll"></div></div>
+<div id="output-screen"><div id="output-masthead"></div><div id="output-scroll"></div></div>
 
 <div class="sky">
   <div class="sky-night" aria-hidden="true"></div>
@@ -1083,6 +1102,29 @@ function fillMarquee() {
 }
 
 const resultsHome = document.getElementById('results-area').parentElement;
+
+// The masthead is a flex sibling of the scroller rather than part of it, so the
+// sticky side panes can no longer size themselves against the whole viewport —
+// publish its measured height for them to subtract.
+function publishMastheadHeight() {
+  const mast = document.getElementById('output-masthead');
+  const screen = document.getElementById('output-screen');
+  if (mast && screen) screen.style.setProperty('--mast-h', mast.offsetHeight + 'px');
+}
+function setMasthead(html) {
+  const mast = document.getElementById('output-masthead');
+  if (!mast) return;
+  mast.innerHTML = html;
+  // the breadcrumb only needs to name the paper while the masthead is empty
+  // (during loading); once the masthead is up, repeating the title is noise
+  document.body.classList.toggle('has-masthead', !!html);
+  publishMastheadHeight();
+}
+if (typeof ResizeObserver === 'function') {
+  const mast = document.getElementById('output-masthead');
+  if (mast) new ResizeObserver(publishMastheadHeight).observe(mast);
+}
+
 function enterFocus() {
   // navigate to the output screen: move the results/output DOM into it
   const ra = document.getElementById('results-area');
@@ -1099,6 +1141,7 @@ function exitFocus() {
   if (ra && resultsHome && ra.parentElement !== resultsHome) resultsHome.appendChild(ra);
   // …then start fresh — no stale PDF/summary left sitting on the start screen
   if (ra) ra.innerHTML = '';
+  setMasthead('');
   window.pdfDoc = null;
   const crumb = document.getElementById('focus-crumb-title');
   if (crumb) crumb.textContent = '';
@@ -1108,6 +1151,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') exitFocus();
 function showLoading() {
   const t0 = Date.now();
   enterFocus();
+  setMasthead('');
   const crumb = document.getElementById('focus-crumb-title');
   if (crumb) crumb.textContent = 'Analyzing paper\u2026';
   document.getElementById('results-area').innerHTML = `
@@ -1209,6 +1253,7 @@ function clearLoading() {
 
 function showError(msg) {
   clearLoading();
+  setMasthead('');
   document.getElementById('results-area').innerHTML = `
     <div style="padding: 8px 0">
       <div class="error-box"><i class="ti ti-alert-circle" style="vertical-align:-2px;margin-right:6px"></i>${msg}</div>
@@ -1480,9 +1525,8 @@ function renderResults(data) {
           </div>`).join('')}
       </aside>`;
 
-  document.getElementById('results-area').innerHTML = `
-    <div class="reading-room${usePdf ? ' has-pdf' : ''}" id="reading-room">${leftPane}
-      <div class="summary-pane">
+  // the masthead renders outside the scroller, so it cannot scroll away
+  setMasthead(`
     <div class="paper-header">
       <div class="paper-title">${escapeHtml(data.title || 'Untitled paper')}</div>
       ${(data.authors && data.authors.length) || insts.length
@@ -1497,8 +1541,11 @@ function renderResults(data) {
         ${data.journal ? `<span class="tag">${escapeHtml(String(data.journal).slice(0, 40))}</span>` : ''}
         ${data.cited_by != null ? `<span class="tag">${data.cited_by} citations</span>` : ''}
       </div>
-    </div>
+    </div>`);
 
+  document.getElementById('results-area').innerHTML = `
+    <div class="reading-room${usePdf ? ' has-pdf' : ''}" id="reading-room">${leftPane}
+      <div class="summary-pane">
     ${str(data.one_line_summary) ? `<div class="one-line-summary"><p>${escapeHtml(str(data.one_line_summary))}</p></div>` : ''}
 
     <div class="stats">
