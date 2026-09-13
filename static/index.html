@@ -460,7 +460,23 @@
     animation: screenIn .35s cubic-bezier(.16,1,.3,1) both;
   }
   @keyframes screenIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-  #output-scroll { height: 100%; overflow-y: auto; padding: 26px 32px 56px; scrollbar-width: thin; }
+  #output-scroll {
+    --out-pad-top: 26px;
+    height: 100%; overflow-y: auto; padding: var(--out-pad-top) 32px 56px; scrollbar-width: thin;
+  }
+  /* the paper header is the page's masthead: pin it flush under the topbar so it
+     never moves, and let the summary scroll underneath it. sticky offsets are
+     measured from the scrollport's content edge, so pull it up by the scroll
+     container's own top padding (and pad the header back out by the same amount,
+     with a matching negative margin so nothing shifts at rest) — otherwise a
+     26px strip of scrolling text shows above it. */
+  body.screen .paper-header {
+    top: calc(-1 * var(--out-pad-top));
+    margin-top: calc(-1 * var(--out-pad-top));
+    padding-top: calc(var(--out-pad-top) + 10px);
+    background: #fafaf9;
+  }
+  body.dark.screen .paper-header { background: #141210; }
   body.screen .reading-room { gap: 26px; }
   body.screen .page-rail { width: min(38%, 500px); position: sticky; top: 0; }
   @media (max-width: 860px) { body.screen .page-rail { width: 100%; } }
