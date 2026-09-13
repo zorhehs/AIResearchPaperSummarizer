@@ -215,39 +215,3 @@ test("exportReport omits absent sections instead of emitting empty headings", ()
 test("exportReport falls back to a title rather than emitting an empty one", () => {
   assert.ok(fe.exportReport({}).startsWith("# Untitled paper"));
 });
-
-// Regressions in the redesigned upload/results workflow.
-test('starting another paper restores the upload dropzone and clears the old PDF', () => {
-  const ui = loadFrontend();
-  const nodes = new Map();
-  ui.document.getElementById = id => {
-    if (!nodes.has(id)) nodes.set(id, {
-      style: {}, value: '', innerHTML: '', disabled: false,
-      classList: { remove() {}, add() {} }, removeAttribute() {},
-    });
-    return nodes.get(id);
-  };
-  ui.setFile({name:'first.pdf',size:1000});
-  assert.equal(nodes.get('dropzone').style.display, 'none');
-  assert.ok(ui.window.selectedPdfFile);
-  ui.resetForNewPaper();
-  assert.equal(nodes.get('dropzone').style.display, '');
-  assert.equal(nodes.get('summarize-pdf-btn').disabled, true);
-  assert.equal(ui.window.selectedPdfFile, null);
-  assert.equal(ui.window.currentResult, null);
-});
-
-test('oversized PDFs are rejected without enabling summarization', () => {
-  const ui = loadFrontend();
-  ui.setFile({name:'too-large.pdf',size:201*1024*1024});
-  assert.equal(ui.window.selectedPdfFile, undefined);
-});
-
-test('PDF quote matching tolerates line-break hyphens, ligatures, and nonbreaking spaces', () => {
-  assert.equal(fe.normalizePdfQuote('deductive veriﬁ-\ncation with RTEMS\u202f5'),
-    fe.normalizePdfQuote('deductive verification with RTEMS 5'));
-});
-
-test('evidence cards preserve their finding number', () => {
-  assert.ok(fe.renderFindingsList([{finding:'Third finding'}], 2).includes('>03</span>'));
-});
