@@ -12,7 +12,7 @@ import shutil
 from fastapi import FastAPI, UploadFile, File, Form, Request, Response, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from pipeline import process_input
+from pipeline import process_input, apply_enrichment
 from summarize import summarize_paper, stream_summarize_paper, answer_question
 from user_session import (
     check_and_increment_usage,
@@ -167,7 +167,8 @@ async def summarize(
     try:
         if file:
             saved_path = _save_upload(file)
-            result = process_input(pdf_path=saved_path)
+            # Crossref runs alongside the model call, not ahead of it.
+            result = process_input(pdf_path=saved_path, defer_enrichment=True)
         else:
             result = process_input(doi=doi)
 
@@ -195,6 +196,9 @@ async def summarize(
                     detail="Our AI provider's daily quota is temporarily exhausted. Please try again later."
                 )
             raise HTTPException(status_code=500, detail=f"Summarization failed: {error_msg}")
+
+        # The lookup had the whole model call to finish; collect it now.
+        apply_enrichment(result)
 
         # Structured model summary + pipeline metadata; pipeline values win
         # where they were verified (Crossref) or extracted directly from the PDF.
@@ -254,7 +258,8 @@ async def summarize_stream(
     try:
         if file:
             saved_path = _save_upload(file)
-            result = process_input(pdf_path=saved_path)
+            # Crossref runs alongside the model call, not ahead of it.
+            result = process_input(pdf_path=saved_path, defer_enrichment=True)
         else:
             result = process_input(doi=doi)
 
@@ -268,6 +273,8 @@ async def summarize_stream(
             )
 
         meta = {
+            # (a pending Crossref lookup lives on `result` under a private key;
+            #  only the plain fields are sent)
             "title": result["title"],
             "source": result["source"],
             "abstract": result.get("abstract", ""),
@@ -290,6 +297,13 @@ async def summarize_stream(
                     # streamed result carries title/authors like /summarize
                     # does. Pipeline-verified metadata wins where present.
                     if event.get("type") == "done" and isinstance(event.get("result"), dict):
+                        # The background Crossref lookup had the whole model
+                        # call to finish. Fold whatever it found into the
+                        # metadata the final payload is built from.
+                        apply_enrichment(result)
+                        for k in ("authors", "year", "journal", "cited_by"):
+                            if result.get(k) not in ("", None, []):
+                                meta[k] = result[k]
                         meta_clean = {k: v for k, v in meta.items() if v not in ("", None, [])}
                         merged = {**event["result"], **meta_clean}
                         page_spans = result.get("page_spans") or [[0, len(result.get("full_text", ""))]]

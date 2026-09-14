@@ -42,7 +42,7 @@ def test_stream_requires_input(client):
 
 
 def test_stream_pipeline_error(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: {
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: {
         "source": "error", "title": "", "abstract": "", "full_text": "", "error": "bad pdf",
     })
     res = client.post("/summarize/stream", files={"file": ("paper.pdf", b"junk", "application/pdf")})
@@ -51,7 +51,7 @@ def test_stream_pipeline_error(client, monkeypatch):
 
 
 def test_stream_success(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: dict(FAKE_PAPER))
 
     def fake_stream(text, title="", abstract="", source=""):
         yield {"type": "done", "result": {
@@ -85,7 +85,7 @@ def test_stream_success(client, monkeypatch):
 
 
 def test_stream_section_failure_surfaces_error(client, monkeypatch):
-    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None: dict(FAKE_PAPER))
+    monkeypatch.setattr(api, "process_input", lambda pdf_path=None, doi=None, email=None, **kw: dict(FAKE_PAPER))
 
     def failing_stream(text, title="", abstract="", source=""):
         yield {"type": "error", "detail": "Groq error: rate limit exceeded"}

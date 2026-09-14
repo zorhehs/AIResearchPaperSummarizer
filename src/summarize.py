@@ -21,7 +21,10 @@ LOCAL_MODEL = "llama3.2:1b"
 
 GROQ_MODEL = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
-GROQ_THIRD_MODEL = "qwen/qwen3-32b"  # real Groq model id (qwen3.8-27b does not exist)
+# Checked against the live model list on 2026-09-11: qwen3.8-27b exists,
+# qwen3-32b does not. An earlier "correction" had these the wrong way round
+# and left the rotation with only two working legs.
+GROQ_THIRD_MODEL = "qwen/qwen3.8-27b"
 # Each model has its OWN daily token budget on Groq's free tier. When one model
 # is exhausted (daily quota), the next one still works — so instead of failing
 # after one model's 429s, we rotate through the list below.
@@ -58,28 +61,48 @@ TPM_LIMIT = 8000
 CHARS_PER_TOKEN = 3.8
 OUTPUT_TOKEN_EST = 500
 MAX_INPUT_CHARS = 20000             # hard cap for any single request (≈5.2k tokens)
-SECTION_CONTEXT_CHARS = 18000       # excerpt handed to the section generator
+# 14k chars is ~3.7k tokens of an 8k/min window: a full request plus one
+# retry now fit inside a single window. At 18k a retry never could, and
+# the app sat waiting for the minute to roll.
+SECTION_CONTEXT_CHARS = 14000       # excerpt handed to the summary call
 
 _budget_lock = threading.Lock()
-_budget = {"minute": int(time.time() // 60), "tokens": 0}
+# One window per model. Groq meters tokens-per-minute per model, so a full
+# window on gpt-oss-20b says nothing about gpt-oss-120b — treating them as one
+# pool made the app wait when it could simply have switched.
+_budgets: dict = {}
 
 
 def _est_tokens(chars: int) -> int:
     return max(1, int(chars / CHARS_PER_TOKEN))
 
 
-def _reserve_budget(tokens: int):
-    """Block until `tokens` can be spent in the current one-minute window."""
-    while True:
-        with _budget_lock:
-            now = int(time.time() // 60)
-            if _budget["minute"] != now:
-                _budget["minute"] = now
-                _budget["tokens"] = 0
-            if _budget["tokens"] + tokens <= TPM_LIMIT:
-                _budget["tokens"] += tokens
-                return
+def _window(model: str) -> dict:
+    now = int(time.time() // 60)
+    w = _budgets.setdefault(model, {"minute": now, "tokens": 0})
+    if w["minute"] != now:
+        w["minute"], w["tokens"] = now, 0
+    return w
+
+
+def _try_reserve(model: str, tokens: int) -> bool:
+    """Book `tokens` against `model`'s current window if they fit. Never waits."""
+    with _budget_lock:
+        w = _window(model)
+        if w["tokens"] + tokens <= TPM_LIMIT:
+            w["tokens"] += tokens
+            return True
+        return False
+
+
+def _reserve_budget(tokens: int, model: str = GROQ_MODEL):
+    """Block until `tokens` can be spent in `model`'s one-minute window."""
+    while not _try_reserve(model, tokens):
         time.sleep(1.0)
+
+
+class BudgetUnavailable(Exception):
+    """No candidate model has room for this request right now."""
 
 
 def _cache_get(text: str):
@@ -154,7 +177,25 @@ def _rate_limit_wait(error_msg: str) -> float:
     return 10.0
 
 
-def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_tokens: int = None) -> str:
+def _ask_groq(
+    messages: list,
+    model: str = None,
+    max_retries: int = 3,
+    max_tokens: int = None,
+    json_mode: bool = False,
+    reasoning_effort: str = None,
+    block: bool = True,
+) -> str:
+    """One chat completion, with rotation across GROQ_MODELS.
+
+    json_mode asks Groq to constrain the output to a JSON object, which is what
+    keeps the summary call from ever needing a corrective second request.
+    reasoning_effort is forwarded only to models that accept it (the gpt-oss
+    family); the qwen models take different values and would reject it.
+    block=False raises BudgetUnavailable instead of waiting when no model's
+    window has room — the right behaviour for a retry, which should fall back
+    rather than stall a request that already took one call.
+    """
     from groq import Groq
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
@@ -173,9 +214,7 @@ def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_token
         total += len(c)
         capped.append({**m, "content": c})
     messages = capped
-
-    # Reserve this request's token cost against the one-minute window up front.
-    _reserve_budget(_est_tokens(total) + OUTPUT_TOKEN_EST)
+    need = _est_tokens(total) + OUTPUT_TOKEN_EST
 
     # Candidate models: the requested one first (if any), then the rotation list.
     candidates = []
@@ -183,36 +222,67 @@ def _ask_groq(messages: list, model: str = None, max_retries: int = 3, max_token
         candidates.append(model)
     candidates += [m for m in GROQ_MODELS if m not in candidates]
 
-    last_error = "unknown Groq error"
-    for candidate in candidates:
-        for attempt in range(1, max_retries + 1):
+    def attempt(candidate: str):
+        """Try one model up to max_retries times. Returns text, or None to rotate."""
+        nonlocal last_error
+        extra = {}
+        if max_tokens:
+            extra["max_tokens"] = max_tokens
+        if json_mode:
+            extra["response_format"] = {"type": "json_object"}
+        if reasoning_effort and "gpt-oss" in candidate:
+            extra["reasoning_effort"] = reasoning_effort
+        for n in range(1, max_retries + 1):
             try:
                 response = client.chat.completions.create(
-                    model=candidate,
-                    messages=messages,
-                    temperature=0.3,
-                    **({"max_tokens": max_tokens} if max_tokens else {}),
+                    model=candidate, messages=messages, temperature=0.3, **extra,
                 )
                 return response.choices[0].message.content
             except Exception as e:
                 error_str = str(e)
                 last_error = error_str
                 if "model_not_found" in error_str or "does not exist" in error_str:
-                    break  # model invalid → try next
+                    return None  # model invalid → try next
                 if "rate_limit" in error_str.lower() or "429" in error_str or "413" in error_str:
-                    # Daily quota exhausted for this model → move on, don't wait minutes.
                     if "tokens per day" in error_str.lower():
-                        break
+                        return None  # daily quota gone for this model → move on
                     wait = _rate_limit_wait(error_str)
-                    if wait > 20:  # multi-minute window on a busy path → try next model
-                        break
-                    if attempt == max_retries:
-                        break
+                    if wait > 20 or n == max_retries:
+                        return None  # a long window or no retries left → next model
                     log.info("Rate limited on %s; waiting %.1fs (attempt %d/%d)",
-                             candidate, wait, attempt, max_retries)
+                             candidate, wait, n, max_retries)
                     time.sleep(wait)
                     continue
-                break  # other API error → try next model
+                return None  # other API error → try next model
+        return None
+
+    last_error = "unknown Groq error"
+
+    # Pass 1: any model whose window has room right now, in preference order.
+    # A full window is a reason to rotate, not to wait — the next model meters
+    # its own tokens.
+    no_room = []
+    for candidate in candidates:
+        if not _try_reserve(candidate, need):
+            no_room.append(candidate)
+            continue
+        text = attempt(candidate)
+        if text is not None:
+            return text
+
+    if not no_room:
+        raise Exception(f"Groq error: {last_error}")
+    if not block:
+        raise BudgetUnavailable(
+            f"no room in the current window on {', '.join(no_room)} (need ~{need} tokens)")
+
+    # Pass 2: every model with room has failed; wait for the first full window
+    # to roll and give that model one more go.
+    log.info("Every model's window is full; waiting for %s", no_room[0])
+    _reserve_budget(need, no_room[0])
+    text = attempt(no_room[0])
+    if text is not None:
+        return text
     raise Exception(f"Groq error: {last_error}")
 
 
@@ -350,7 +420,23 @@ def _generate_paper_summary(text: str, title: str = "", abstract: str = "", sour
     last_err = "no response"
     for attempt in range(2):
         try:
-            raw = _ask_groq(messages)
+            # JSON mode makes a malformed response rare enough that the retry
+            # below is a safety net rather than a normal path; low reasoning
+            # effort trims the thinking tokens a summary does not need and
+            # leaves room in the per-minute window.
+            #
+            # The retry is non-blocking on purpose. The old version re-sent the
+            # whole paper plus the previous 4k-character answer, and the input
+            # cap then truncated the correction itself to nothing — so it paid
+            # for a full window's wait to send the same prompt again. Now a
+            # retry either finds a model with room or falls straight through.
+            raw = _ask_groq(
+                messages, json_mode=True, reasoning_effort="low",
+                block=(attempt == 0),
+            )
+        except BudgetUnavailable as e:
+            last_err = str(e)
+            break
         except Exception as e:
             # provider-level failure (quota, network) → try the local fallback
             last_err = str(e)
@@ -362,12 +448,7 @@ def _generate_paper_summary(text: str, title: str = "", abstract: str = "", sour
             last_err = f"schema validation failed ({e.error_count()} error(s))"
         except Exception as e:
             last_err = str(e)
-        if attempt == 0:
-            messages.append({"role": "assistant", "content": (raw or "")[:4000]})
-            messages.append({"role": "user", "content":
-                "Your last output was invalid JSON or did not match the schema. "
-                "Return ONLY the JSON object matching the schema — no markdown, "
-                "no preamble, no code fences."})
+        log.warning("Summary response failed validation (attempt %d): %s", attempt + 1, last_err)
 
     # Last resort: local Ollama in JSON mode
     try:
